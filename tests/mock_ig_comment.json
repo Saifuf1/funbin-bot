@@ -1,0 +1,25 @@
+{
+    "object": "instagram",
+    "entry": [
+        {
+            "id": "IG_PAGE_ID",
+            "changes": [
+                {
+                    "field": "comments",
+                    "value": {
+                        "id": "17858893269000001",
+                        "text": "Ithinu price enthaanu? 😍",
+                        "from": {
+                            "id": "IG_USER_123",
+                            "username": "test_customer"
+                        },
+                        "media": {
+                            "id": "IG_MEDIA_123",
+                            "media_product_type": "REEL"
+                        }
+                    }
+                }
+            ]
+        }
+    ]
+}
