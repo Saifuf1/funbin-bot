@@ -229,6 +229,24 @@ async function handleButtonReply(from, customerName, reply) {
         return handleConfirmBuy(from, customerName, sku);
     }
 
+    // UPI PAYMENT — generate UPI deep link and log order
+    if (id.startsWith('pay_upi_')) {
+        const session = getOrCreateSession(from);
+        if (!session.cart.length) {
+            return waSender.sendText(from, `Cart empty aanu! Oru product select cheyyuka aadhyam. 😊`);
+        }
+        return processPurchase(from, session, 'upi');
+    }
+
+    // COD PAYMENT — confirm order with COD
+    if (id.startsWith('pay_cod_')) {
+        const session = getOrCreateSession(from);
+        if (!session.cart.length) {
+            return waSender.sendText(from, `Cart empty aanu! Oru product select cheyyuka aadhyam. 😊`);
+        }
+        return processCOD(from, session);
+    }
+
     // Fallback
     try {
         const reply = await chat(from, title);
@@ -290,15 +308,23 @@ async function handleConfirmBuy(from, customerName, sku) {
     return waSender.sendInteractive(from, paymentButtons);
 }
 
-async function processPurchase(from, session) {
+async function processPurchase(from, session, method = 'upi') {
     const total = getCartTotal(from);
-    const orderRef = await createOrder({
-        customerName: session.customerName || 'Unknown',
-        phone: from,
-        items: session.cart,
-        totalAmount: total,
-        paymentLink: generateUPILink(total, from, `ORD-${from}`),
-    });
+    const upiLink = generateUPILink(total, from, `ORD-${from}`);
+
+    let orderRef;
+    try {
+        orderRef = await createOrder({
+            customerName: session.customerName || 'Customer',
+            phone: from,
+            items: session.cart,
+            totalAmount: total,
+            paymentLink: upiLink,
+        });
+    } catch (e) {
+        console.error('❌ Order save error:', e.message);
+        orderRef = `ORD-${from}-${Date.now()}`;
+    }
 
     const { text } = buildPaymentMessage({
         items: session.cart,
@@ -307,7 +333,47 @@ async function processPurchase(from, session) {
         orderRef,
     });
 
+    // Clear cart after order is placed
+    updateSession(from, { cart: [] });
+
     return waSender.sendText(from, text);
+}
+
+async function processCOD(from, session) {
+    const total = getCartTotal(from);
+
+    let orderRef;
+    try {
+        orderRef = await createOrder({
+            customerName: session.customerName || 'Customer',
+            phone: from,
+            items: session.cart,
+            totalAmount: total,
+            paymentLink: 'COD',
+        });
+    } catch (e) {
+        console.error('❌ COD order save error:', e.message);
+        orderRef = `ORD-${from}-${Date.now()}`;
+    }
+
+    const itemLines = session.cart
+        .map((i) => `  • ${i.name} x${i.qty || 1} — ₹${i.price * (i.qty || 1)}`)
+        .join('\n');
+
+    const msg =
+        `✅ *Order Confirmed! (Cash on Delivery)*\n` +
+        `━━━━━━━━━━━━━━━━━━\n` +
+        `${itemLines}\n` +
+        `━━━━━━━━━━━━━━━━━━\n` +
+        `💰 *Total: ₹${total}* (Pay on Delivery)\n` +
+        `🔑 Order Ref: \`${orderRef}\`\n\n` +
+        `Delivery address paranjaal oru minute! 📍\n` +
+        `3-5 working days-il reach aagum 🚚`;
+
+    // Clear cart after order is placed
+    updateSession(from, { cart: [] });
+
+    return waSender.sendText(from, msg);
 }
 
 module.exports = { handleMessage };

@@ -23,8 +23,9 @@ async function getAllProducts() {
             price: parseFloat(row.get('Price')) || 0,
             sku: row.get('SKU') || '',
             material: row.get('Material') || '',
-            imageUrl: row.get('ImageURL') || '',
+            imageUrl: row.get('Image') || row.get('ImageURL') || '', // supports both column names
             stockStatus: row.get('StockStatus') || 'Unknown',
+            description: row.get('Description') || '',
         })).filter((p) => p.name);
 
         cacheExpiry = Date.now() + CACHE_TTL_MS;
