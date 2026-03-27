@@ -192,13 +192,14 @@ async function validateDeliveryAddress(text) {
 The customer has provided this as their delivery details:
 "${text}"
 
-Check if this text contains ALL of the following:
+Check if this text contains ALL of the following 5 details:
 1. A Name
-2. A Street/House/Location
-3. A 6-digit Pincode
-4. A 10-digit Phone Number
+2. A Street Address or House Name
+3. A City or Local Area
+4. A 6-digit Pincode
+5. A 10-digit Phone Number
 
-If ALL 4 are present, respond EXACTLY with:
+If ALL 5 are present, respond EXACTLY with:
 VALID_ADDRESS|||<Format the address nicely on multiple lines>
 
 If ANY are missing, respond EXACTLY with:
@@ -215,11 +216,11 @@ Do not output any markdown code blocks. Just the raw string format.`;
         } else if (reply.startsWith('MISSING_INFO|||')) {
             return { valid: false, message: reply.split('|||')[1].trim() };
         } else {
-            return { valid: false, message: "Please provide your Full Name, Address, Pincode, and Phone Number in a single message to proceed 🚚" };
+            return { valid: false, message: "Please provide all 5 details: Full Name, Street/House, City/Area, Pincode, and Phone Number in a single message to proceed 🚚" };
         }
     } catch (e) {
         console.error('Validation Error', e);
-        return { valid: false, message: "Oru issue und! Please type your full address with Pincode and Phone number." };
+        return { valid: false, message: "Oru issue und! Please type your full address with City, Pincode and Phone number." };
     }
 }
 
