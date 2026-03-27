@@ -272,9 +272,19 @@ async function handleListReply(from, customerName, reply) {
         // Send product details
         await waSender.sendText(from, formatProductForCustomer(product));
 
-        // Send product image if available
-        if (product.imageUrl) {
-            await waSender.sendImage(from, product.imageUrl, product.name);
+        // Send product image — skip Amazon CDN URLs (hotlink blocked by WhatsApp servers)
+        const BLOCKED_HOSTS = ['m.media-amazon.com', 'amazon.com', 'amzn.to', 'ssl-images-amazon'];
+        const imageUrl = product.imageUrl || '';
+        const isBlocked = BLOCKED_HOSTS.some((host) => imageUrl.includes(host));
+
+        if (imageUrl && !isBlocked) {
+            try {
+                await waSender.sendImage(from, imageUrl, product.name);
+            } catch (imgErr) {
+                console.warn(`⚠️  Image send failed for ${product.name}: ${imgErr.message}`);
+            }
+        } else if (isBlocked) {
+            console.log(`⚠️  Skipping Amazon CDN image for ${product.name} — not accessible by WhatsApp servers`);
         }
 
         // Send buy buttons

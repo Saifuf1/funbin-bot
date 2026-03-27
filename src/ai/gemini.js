@@ -27,8 +27,8 @@ async function chat(userId, userText) {
 
     const systemPrompt = getSystemPrompt(productContext, businessInfo);
 
-    // Use gemini-2.0-flash — more reliable, faster, free tier friendly
-    const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
+    // gemini-1.5-flash: 1500 req/day free vs gemini-2.0-flash: 200 req/day — much better for free tier
+    const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
 
     // Build history — inject system prompt as the very first turn
     // This avoids the systemInstruction + history incompatibility in SDK 0.21.0
@@ -80,7 +80,7 @@ async function analyzeImage(imageBase64, mimeType, userId) {
     }
 
     const systemPrompt = getSystemPrompt(productContext, businessInfo);
-    const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
+    const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
 
     const prompt = `${systemPrompt}
 

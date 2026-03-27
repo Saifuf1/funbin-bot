@@ -34,6 +34,7 @@ function generateUPILink(amount, phone, orderRef) {
  */
 function buildPaymentMessage({ items, total, phone, orderRef }) {
     const upiLink = generateUPILink(total, phone, orderRef);
+    const shortRef = orderRef?.split('-').slice(-1)[0] || phone.slice(-4);
 
     const itemLines = items
         .map((i) => `  • ${i.name} x${i.qty || 1} — ₹${i.price * (i.qty || 1)}`)
@@ -45,12 +46,14 @@ function buildPaymentMessage({ items, total, phone, orderRef }) {
         `${itemLines}\n` +
         `━━━━━━━━━━━━━━━━━━\n` +
         `💰 *Total: ₹${total}*\n\n` +
-        `📱 *Payment via UPI:*\n` +
-        `${upiLink}\n\n` +
-        `👆 Ithu click cheyyuka athalla Google Pay / PhonePe / Paytm-il\n` +
-        `UPI ID: *${config.upiId}* use cheyyuka\n\n` +
-        `Payment cheythu kazhinju screenshot അയയ്ക്കൂ! ✅\n` +
-        `Order Ref: \`${orderRef}\``;
+        `📲 *UPI Payment Steps:*\n` +
+        `1️⃣ Open *Google Pay / PhonePe / Paytm*\n` +
+        `2️⃣ Tap "Pay" or "Send Money"\n` +
+        `3️⃣ Enter UPI ID: *${config.upiId}*\n` +
+        `4️⃣ Amount: *₹${total}*\n` +
+        `5️⃣ Note/Remarks: \`${shortRef}\`\n` +
+        `6️⃣ Pay cheythu kazhinju screenshot ayakkoo! 📸✅\n\n` +
+        `🔑 Order Ref: \`${orderRef}\``;
 
     return { text, upiLink };
 }
