@@ -94,14 +94,22 @@ async function handleTextMessage(from, customerName, text) {
 
     // AI Chat — main path
     try {
+        console.log(`🤖 Calling Gemini for: ${from} | text: "${text.slice(0, 60)}"`);
         const reply = await chat(from, text);
+        console.log(`🤖 Gemini reply ready, sending to ${from}`);
         await waSender.sendText(from, reply);
     } catch (err) {
         console.error('❌ WA AI chat error:', err.message);
-        await waSender.sendText(
-            from,
-            `Oru chinna issue und! 😅 Oru minute try again cheyyuka. 🙏`
-        );
+        console.error('   Stack:', err.stack);
+        // Try sending error message — if this also fails, log but don't crash
+        try {
+            await waSender.sendText(
+                from,
+                `Oru chinna issue und! 😅 Oru minute try again cheyyuka. 🙏`
+            );
+        } catch (sendErr) {
+            console.error('❌ Also failed to send error message:', sendErr.message);
+        }
     }
 }
 
@@ -110,29 +118,43 @@ async function handleImageMessage(from, imageObj) {
     try {
         await waSender.sendText(from, `📸 Image kandii! Oru second... analysing! 🔍`);
 
-        // Download image from WhatsApp media URL
         const mediaId = imageObj.id;
         const mimeType = imageObj.mime_type || 'image/jpeg';
+        console.log(`🖼️  Image received: mediaId=${mediaId}, mime=${mimeType}`);
 
-        // Get download URL from Graph API
-        const mediaUrlRes = await axios.get(
-            `https://graph.facebook.com/v20.0/${mediaId}`,
-            { headers: { Authorization: `Bearer ${config.whatsappToken}` } }
-        );
-        const downloadUrl = mediaUrlRes.data.url;
+        // Step 1: Resolve media download URL
+        let downloadUrl;
+        try {
+            const mediaUrlRes = await axios.get(
+                `https://graph.facebook.com/v20.0/${mediaId}`,
+                { headers: { Authorization: `Bearer ${config.whatsappToken}` } }
+            );
+            downloadUrl = mediaUrlRes.data.url;
+            console.log(`🖼️  Media URL resolved: ${downloadUrl?.slice(0, 60)}...`);
+        } catch (e) {
+            console.error('❌ Failed to resolve media URL:', e.response?.data || e.message);
+            throw new Error('Media URL resolution failed — token may be expired');
+        }
 
-        // Download image as base64
-        const imageRes = await axios.get(downloadUrl, {
-            responseType: 'arraybuffer',
-            headers: { Authorization: `Bearer ${config.whatsappToken}` },
-        });
-        const base64 = Buffer.from(imageRes.data).toString('base64');
+        // Step 2: Download image bytes
+        let base64;
+        try {
+            const imageRes = await axios.get(downloadUrl, {
+                responseType: 'arraybuffer',
+                headers: { Authorization: `Bearer ${config.whatsappToken}` },
+            });
+            base64 = Buffer.from(imageRes.data).toString('base64');
+            console.log(`🖼️  Image downloaded: ${imageRes.data.byteLength} bytes`);
+        } catch (e) {
+            console.error('❌ Failed to download image bytes:', e.message);
+            throw new Error('Image download failed');
+        }
 
-        // Pass to Gemini Vision
+        // Step 3: Gemini Vision analysis
         const reply = await analyzeImage(base64, mimeType, from);
         await waSender.sendText(from, reply);
 
-        // Show BUY NOW buttons after image analysis
+        // Step 4: Show buy buttons for first product match
         const products = await getAllProducts();
         if (products.length > 0) {
             const firstMatch = products[0];
@@ -140,11 +162,15 @@ async function handleImageMessage(from, imageObj) {
             await waSender.sendInteractive(from, buttons);
         }
     } catch (err) {
-        console.error('❌ Image analysis error:', err.message);
-        await waSender.sendText(
-            from,
-            `Image analyze cheyyaan pattunilla 😅 Oru screenshot aanengil clear-ah oru photo ayakkoo! 📸`
-        );
+        console.error('❌ Image handler error:', err.message);
+        try {
+            await waSender.sendText(
+                from,
+                `Image kandii, pakshe process cheyyaan pattunilla 😅\nOru clear screenshot ayakkam! 📸`
+            );
+        } catch (sendErr) {
+            console.error('❌ Also failed to send image error reply:', sendErr.message);
+        }
     }
 }
 

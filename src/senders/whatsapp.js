@@ -3,10 +3,15 @@ const config = require('../config');
 
 const BASE = `https://graph.facebook.com/v20.0/${config.whatsappPhoneNumberId}/messages`;
 
-const HEADERS = {
-    Authorization: `Bearer ${config.whatsappToken}`,
-    'Content-Type': 'application/json',
-};
+/**
+ * Build headers dynamically every call — ensures token is always fresh from config
+ */
+function getHeaders() {
+    return {
+        Authorization: `Bearer ${config.whatsappToken}`,
+        'Content-Type': 'application/json',
+    };
+}
 
 /**
  * Send any WhatsApp message payload.
@@ -14,11 +19,17 @@ const HEADERS = {
  */
 async function sendMessage(payload) {
     try {
-        const res = await axios.post(BASE, payload, { headers: HEADERS });
+        const res = await axios.post(BASE, payload, { headers: getHeaders() });
         console.log(`✅ WhatsApp message sent to ${payload.to}`);
         return res.data;
     } catch (err) {
-        console.error('❌ WhatsApp send failed:', err.response?.data || err.message);
+        const errData = err.response?.data;
+        console.error('❌ WhatsApp send FAILED');
+        console.error('   Status:', err.response?.status);
+        console.error('   Error:', JSON.stringify(errData, null, 2));
+        console.error('   Token prefix:', config.whatsappToken?.slice(0, 20) + '...');
+        // Re-throw so caller knows it failed
+        throw err;
     }
 }
 
@@ -33,17 +44,16 @@ async function sendText(to, text) {
         recipient_type: 'individual',
         to,
         type: 'text',
-        text: { body: text, preview_url: true },
+        text: { body: text, preview_url: false },
     });
 }
 
 /**
  * Send an interactive message (list or buttons)
  * @param {string} to
- * @param {object} interactivePayload - The full interactive payload object (from messages.js)
+ * @param {object} interactivePayload - The full WhatsApp message object (from messages.js)
  */
 async function sendInteractive(to, interactivePayload) {
-    // interactivePayload is already a full WhatsApp message object from messages.js
     return sendMessage(interactivePayload);
 }
 
@@ -76,10 +86,11 @@ async function markAsRead(messageId) {
                 status: 'read',
                 message_id: messageId,
             },
-            { headers: HEADERS }
+            { headers: getHeaders() }
         );
     } catch (err) {
-        // Non-critical — swallow errors
+        // Non-critical — log but don't throw
+        console.warn('⚠️  markAsRead failed:', err.response?.data?.error?.message || err.message);
     }
 }
 
