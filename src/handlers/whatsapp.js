@@ -64,6 +64,15 @@ async function handleMessage({ from, customerName, message }) {
 
 // ─── Text Handler ─────────────────────────────────────────────────────────────
 async function handleTextMessage(from, customerName, text) {
+    const session = getOrCreateSession(from);
+
+    // Awaiting delivery address?
+    if (session.awaitingAddress) {
+        updateSession(from, { awaitingAddress: false, deliveryAddress: text });
+        console.log(`🏠 Address received for ${from}: ${text}`);
+        return processPurchase(from, session, text);
+    }
+
     const lower = text.toLowerCase().trim();
 
     // Greeting → Welcome menu
@@ -229,24 +238,6 @@ async function handleButtonReply(from, customerName, reply) {
         return handleConfirmBuy(from, customerName, sku);
     }
 
-    // UPI PAYMENT — generate UPI deep link and log order
-    if (id.startsWith('pay_upi_')) {
-        const session = getOrCreateSession(from);
-        if (!session.cart.length) {
-            return waSender.sendText(from, `Cart empty aanu! Oru product select cheyyuka aadhyam. 😊`);
-        }
-        return processPurchase(from, session, 'upi');
-    }
-
-    // COD PAYMENT — confirm order with COD
-    if (id.startsWith('pay_cod_')) {
-        const session = getOrCreateSession(from);
-        if (!session.cart.length) {
-            return waSender.sendText(from, `Cart empty aanu! Oru product select cheyyuka aadhyam. 😊`);
-        }
-        return processCOD(from, session);
-    }
-
     // Fallback
     try {
         const reply = await chat(from, title);
@@ -304,21 +295,18 @@ async function handleConfirmBuy(from, customerName, sku) {
     addToCart(from, product);
     const total = getCartTotal(from);
 
-    // Payment method buttons
-    const paymentButtons = waMessages.buildReplyButtons(
-        from,
-        `✅ *${product.name}* added to cart!\n💰 Total: ₹${total}\n\nPayment method?`,
-        [
-            { id: `pay_upi_${sku}`, title: '📱 UPI Payment' },
-            { id: `pay_cod_${sku}`, title: '💵 Cash on Delivery' },
-        ],
-        'Choose Payment',
-        `UPI ID: ${config.upiId}`
-    );
-    return waSender.sendInteractive(from, paymentButtons);
+    // Ask for Delivery Address instead of showing payment buttons
+    updateSession(from, { awaitingAddress: true });
+
+    const message =
+        `✅ *${product.name}* added to cart!\n` +
+        `💰 Total: ₹${total}\n\n` +
+        `Please reply with your full *Delivery Address, Pincode, and Phone Number* to proceed with the order. 🚚`;
+
+    return waSender.sendText(from, message);
 }
 
-async function processPurchase(from, session, method = 'upi') {
+async function processPurchase(from, session, address) {
     const total = getCartTotal(from);
     const upiLink = generateUPILink(total, from, `ORD-${from}`);
 
@@ -330,6 +318,7 @@ async function processPurchase(from, session, method = 'upi') {
             items: session.cart,
             totalAmount: total,
             paymentLink: upiLink,
+            address: address, // Save address to Google Sheet
         });
     } catch (e) {
         console.error('❌ Order save error:', e.message);
@@ -357,58 +346,21 @@ async function processPurchase(from, session, method = 'upi') {
         .join('\n');
 
     const text =
-        `🧾 *Order Confirmed!*\n` +
+        `🧾 *Order Placed!*\n` +
         `━━━━━━━━━━━━━━━━━━\n` +
         `${itemLines}\n` +
         `━━━━━━━━━━━━━━━━━━\n` +
         `💰 *Total: ₹${total}*\n\n` +
         `📲 *Click to Pay ↓*\n` +
         `${payLink}\n\n` +
-        `☝️ Link click cheythu GPay / PhonePe / Paytm-il pay cheyyuka\n\n` +
-        `Payment screenshot ayakkoo! ✅\n` +
+        `☝️ Please click the link to pay via GPay / PhonePe / Paytm.\n\n` +
+        `*Awaiting payment screenshot to confirm your order!* ✅\n` +
         `🔑 Ref: \`${orderRef}\``;
 
     // Clear cart
     updateSession(from, { cart: [] });
 
     return waSender.sendText(from, text);
-}
-
-async function processCOD(from, session) {
-    const total = getCartTotal(from);
-
-    let orderRef;
-    try {
-        orderRef = await createOrder({
-            customerName: session.customerName || 'Customer',
-            phone: from,
-            items: session.cart,
-            totalAmount: total,
-            paymentLink: 'COD',
-        });
-    } catch (e) {
-        console.error('❌ COD order save error:', e.message);
-        orderRef = `ORD-${from}-${Date.now()}`;
-    }
-
-    const itemLines = session.cart
-        .map((i) => `  • ${i.name} x${i.qty || 1} — ₹${i.price * (i.qty || 1)}`)
-        .join('\n');
-
-    const msg =
-        `✅ *Order Confirmed! (Cash on Delivery)*\n` +
-        `━━━━━━━━━━━━━━━━━━\n` +
-        `${itemLines}\n` +
-        `━━━━━━━━━━━━━━━━━━\n` +
-        `💰 *Total: ₹${total}* (Pay on Delivery)\n` +
-        `🔑 Order Ref: \`${orderRef}\`\n\n` +
-        `Delivery address paranjaal oru minute! 📍\n` +
-        `3-5 working days-il reach aagum 🚚`;
-
-    // Clear cart after order is placed
-    updateSession(from, { cart: [] });
-
-    return waSender.sendText(from, msg);
 }
 
 module.exports = { handleMessage };

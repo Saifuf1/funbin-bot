@@ -2,7 +2,7 @@ const { getOrdersSheet } = require('./sheets');
 
 /**
  * Append a new order row to the Orders Google Sheet tab.
- * Columns: CustomerName, Phone, Items, TotalAmount, Status, PaymentLink
+ * Columns: CustomerName, Phone, Items, TotalAmount, Status, PaymentLink, Address
  *
  * @param {object} order
  * @param {string} order.customerName
@@ -10,9 +10,10 @@ const { getOrdersSheet } = require('./sheets');
  * @param {string|Array} order.items - item list (array or comma-separated string)
  * @param {number} order.totalAmount
  * @param {string} order.paymentLink - UPI deep link
+ * @param {string} order.address - Customer Delivery Address
  * @returns {Promise<string>} - Generated order reference (e.g. ORD-9876543210-1711401600)
  */
-async function createOrder({ customerName, phone, items, totalAmount, paymentLink }) {
+async function createOrder({ customerName, phone, items, totalAmount, paymentLink, address }) {
     const sheet = await getOrdersSheet();
 
     const orderRef = `ORD-${phone}-${Math.floor(Date.now() / 1000)}`;
@@ -28,6 +29,7 @@ async function createOrder({ customerName, phone, items, totalAmount, paymentLin
         Status: 'Pending',
         PaymentLink: paymentLink,
         OrderRef: orderRef,
+        Address: address || 'Not provided',
         CreatedAt: new Date().toISOString(),
     });
 
