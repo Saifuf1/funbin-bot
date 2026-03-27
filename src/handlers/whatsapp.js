@@ -127,14 +127,16 @@ async function handleTextMessage(from, customerName, text) {
 
     // Awaiting delivery address?
     if (session.awaitingAddress) {
-        const validation = await validateDeliveryAddress(text);
+        const combinedText = session.tempAddress ? session.tempAddress + ', ' + text : text;
+        const validation = await validateDeliveryAddress(combinedText);
 
         if (validation.valid) {
-            updateSession(from, { awaitingAddress: false, deliveryAddress: validation.formatted });
+            updateSession(from, { awaitingAddress: false, deliveryAddress: validation.formatted, tempAddress: null });
             console.log(`🏠 Valid Address received for ${from}`);
             return processPurchase(from, session, validation.formatted);
         } else {
-            console.log(`⚠️ Invalid address attempt from ${from}`);
+            console.log(`⚠️ Invalid address attempt from ${from}. Buffering for next try.`);
+            updateSession(from, { tempAddress: combinedText });
             return waSender.sendText(from, validation.message);
         }
     }
@@ -191,7 +193,7 @@ async function handleTextMessage(from, customerName, text) {
 // ─── Image Handler ────────────────────────────────────────────────────────────
 async function handleImageMessage(from, imageObj) {
     try {
-        await waSender.sendText(from, `📸 Image kandii! Oru second... analysing! 🔍`);
+        await waSender.sendText(from, `📸 Image kandu! Oru second... analysing! 🔍`);
 
         const mediaId = imageObj.id;
         const mimeType = imageObj.mime_type || 'image/jpeg';

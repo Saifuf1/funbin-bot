@@ -106,13 +106,23 @@ async function analyzeImage(imageBase64, mimeType, userId) {
 
     const prompt = `${systemPrompt}
 
-A customer has sent this image. Look at it carefully and:
-1. Describe what you see (product type, color, style)
-2. Match it to the closest item in the Fun bin product catalog above
-3. Tell the customer the product name, price, and availability
-4. Respond in Manglish as per your personality
+A customer has sent an image on WhatsApp. Look at it carefully.
 
-Reply naturally as if you're in a WhatsApp conversation. Keep it short and friendly.`;
+1. Is this a PAYMENT SCREENSHOT (like from Google Pay, PhonePe, Paytm, or a banking app)?
+If YES:
+- Reply politely acknowledging the payment, and mention that our team will verify it shortly and process the order. Do NOT try to match it to a toy or mention any product SKUs. 
+
+2. Is this a PRODUCT, TOY, or SHOPPING image?
+If YES:
+- Match it to the closest item in the Fun bin product catalog above.
+- If we HAVE it or something very similar, tell them the product name, price, and availability. You MUST include the exact product SKU (e.g. TOY-TAB-01) somewhere in your text.
+- If we do NOT have it in stock, politely say so and suggest a similar product we DO have in stock.
+
+3. Does it look like NEITHER of these?
+If YES:
+- Just politely say you didn't quite understand the image and ask how we can help.
+
+Respond naturally in Manglish or English depending on their language preference. Keep it short and friendly.`;
 
     const result = await model.generateContent([
         { text: prompt },
@@ -141,7 +151,7 @@ async function analyzeAudio(audioBase64, mimeType, userId) {
         productContext = pCtx;
         businessInfo = bInfo;
         if (userOrders && userOrders.length > 0) {
-            ordersContext = userOrders.map(o => `Ref: ${o.ref} | Items: ${o.items} | Status: ${o.status}`).join('\n');
+            ordersContext = userOrders.map(o => `Ref: ${o.ref} | Items: ${o.items} | Status: ${o.status} `).join('\n');
         }
     } catch (e) {
         console.error('⚠️  Sheets error in analyzeAudio:', e.message);
@@ -152,10 +162,10 @@ async function analyzeAudio(audioBase64, mimeType, userId) {
 
     const prompt = `${systemPrompt}
 
-A customer has sent a **voice note/audio message**. Listen to it carefully and:
-1. Understand their intent (asking about a product, delivery, etc.).
-2. Respond naturally in TEXT format. Match their spoken language (if they speak Malayalam, reply in Manglish text. If English, reply in English text).
-3. Be super helpful and assist them with their purchase. Keep it short and friendly.`;
+A customer has sent a ** voice note / audio message **.Listen to it carefully and:
+    1. Understand their intent(asking about a product, delivery, etc.).
+2. Respond naturally in TEXT format.Match their spoken language(if they speak Malayalam, reply in Manglish text.If English, reply in English text).
+    3. Be super helpful and assist them with their purchase.Keep it short and friendly.`;
 
     try {
         const result = await model.generateContent([
@@ -192,18 +202,18 @@ async function validateDeliveryAddress(text) {
 The customer has provided this as their delivery details:
 "${text}"
 
-Check if this text contains ALL of the following 5 details:
+Check if this combined text contains ALL of the following 5 details:
 1. A Name
 2. A Street Address or House Name
 3. A City or Local Area
 4. A 6-digit Pincode
-5. A 10-digit Phone Number
+5. A Phone Number
 
 If ALL 5 are present, respond EXACTLY with:
-VALID_ADDRESS|||<Format the address nicely on multiple lines>
+VALID_ADDRESS|||<Format the complete address nicely on multiple lines>
 
 If ANY are missing, respond EXACTLY with:
-MISSING_INFO|||<Politely ask the customer in Manglish to provide the specific missing details. Tell them to send all details together in one message.>
+MISSING_INFO|||<Politely ask the customer in Manglish to provide ONLY the specific missing details. Be friendly!>
 
 Do not output any markdown code blocks. Just the raw string format.`;
 
