@@ -1,7 +1,7 @@
 const waSender = require('../senders/whatsapp');
 const waMessages = require('../whatsapp/messages');
 const { generateUPILink, buildPaymentMessage, buildCODMessage } = require('../whatsapp/upi');
-const { chat, analyzeImage } = require('../ai/gemini');
+const { chat, analyzeImage, analyzeAudio } = require('../ai/gemini');
 const { getOrCreateSession, updateSession, addToCart, getCartTotal } = require('../ai/context');
 const { getAllProducts, getCategories, getProductsByCategory, findProductBySKU, formatProductForCustomer } = require('../db/products');
 const { createOrder } = require('../db/orders');
@@ -55,11 +55,70 @@ async function handleMessage({ from, customerName, message }) {
         return;
     }
 
-    // ── Sticker / Audio / Video — fallback ────────────────────────────────
+    // ── Audio Message (Voice Note) ───────────────────────────────────────────
+    if (msgType === 'audio') {
+        await handleAudioMessage(from, message.audio);
+        return;
+    }
+
+    // ── Sticker / Video — fallback ────────────────────────────────────────
     await waSender.sendText(
         from,
         `Ithu nte message kandilla 😅 Text cheytu chodichooo! 🙏`
     );
+}
+
+// ─── Audio Handler ────────────────────────────────────────────────────────────
+async function handleAudioMessage(from, audioObj) {
+    try {
+        await waSender.sendText(from, `🎤 Voice note kettukondirikkukayaanu... oru minute! 🎧`);
+
+        const mediaId = audioObj.id;
+        const mimeType = audioObj.mime_type || 'audio/ogg';
+        console.log(`🎤 Audio received: mediaId=${mediaId}, mime=${mimeType}`);
+
+        // Step 1: Resolve media download URL
+        let downloadUrl;
+        try {
+            const mediaUrlRes = await axios.get(
+                `https://graph.facebook.com/v20.0/${mediaId}`,
+                { headers: { Authorization: `Bearer ${config.whatsappToken}` } }
+            );
+            downloadUrl = mediaUrlRes.data.url;
+        } catch (e) {
+            console.error('❌ Failed to resolve audio URL:', e.response?.data || e.message);
+            throw new Error('Audio URL resolution failed');
+        }
+
+        // Step 2: Download audio bytes
+        let base64;
+        try {
+            const audioRes = await axios.get(downloadUrl, {
+                responseType: 'arraybuffer',
+                headers: { Authorization: `Bearer ${config.whatsappToken}` },
+            });
+            base64 = Buffer.from(audioRes.data).toString('base64');
+            console.log(`🎤 Audio downloaded: ${audioRes.data.byteLength} bytes`);
+        } catch (e) {
+            console.error('❌ Failed to download audio bytes:', e.message);
+            throw new Error('Audio download failed');
+        }
+
+        // Step 3: Gemini Audio analysis
+        const reply = await analyzeAudio(base64, mimeType, from);
+        await waSender.sendText(from, reply);
+
+    } catch (err) {
+        console.error('❌ Audio handler error:', err.message);
+        try {
+            await waSender.sendText(
+                from,
+                `Voice note process cheyyam pattunnilla 😅\nOru text message aayi chodikkamo? 🙏`
+            );
+        } catch (sendErr) {
+            console.error('❌ Also failed to send audio error reply:', sendErr.message);
+        }
+    }
 }
 
 // ─── Text Handler ─────────────────────────────────────────────────────────────

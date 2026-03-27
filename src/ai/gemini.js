@@ -4,6 +4,7 @@ const { getSystemPrompt } = require('./prompts');
 const { getOrCreateSession, addToHistory } = require('./context');
 const { formatProductsForAI } = require('../db/products');
 const { getBusinessInfoForAI } = require('../db/sheets');
+const { getOrdersByPhone } = require('../db/orders');
 
 const genAI = new GoogleGenerativeAI(config.geminiApiKey);
 const MODEL_NAME = process.env.GEMINI_MODEL || 'gemini-1.5-flash';
@@ -15,19 +16,28 @@ console.log(`🤖 Gemini model: ${MODEL_NAME}`);
 async function chat(userId, userText) {
     const session = getOrCreateSession(userId);
 
-    // Get fresh product context and business info
+    // Get fresh product context, business info, and customer orders
     let productContext = 'Product catalog temporarily unavailable.';
     let businessInfo = 'Business info temporarily unavailable.';
+    let ordersContext = 'No previous orders found.';
+
     try {
-        [productContext, businessInfo] = await Promise.all([
+        const [pCtx, bInfo, userOrders] = await Promise.all([
             formatProductsForAI(),
             getBusinessInfoForAI(),
+            getOrdersByPhone(userId)
         ]);
+        productContext = pCtx;
+        businessInfo = bInfo;
+
+        if (userOrders && userOrders.length > 0) {
+            ordersContext = userOrders.map(o => `Ref: ${o.ref} | Items: ${o.items} | Status: ${o.status}`).join('\n');
+        }
     } catch (sheetErr) {
         console.error('⚠️  Google Sheets error (using fallback):', sheetErr.message);
     }
 
-    const systemPrompt = getSystemPrompt(productContext, businessInfo);
+    const systemPrompt = getSystemPrompt(productContext, businessInfo, ordersContext);
 
     const model = genAI.getGenerativeModel({ model: MODEL_NAME });
 
@@ -116,12 +126,60 @@ Reply naturally as if you're in a WhatsApp conversation. Keep it short and frien
 }
 
 /**
+ * Analyze an audio message (Voice Note) using Gemini 1.5/2.5 Flash's native multimodal capabilities.
+ */
+async function analyzeAudio(audioBase64, mimeType, userId) {
+    let productContext = 'No catalog available.';
+    let businessInfo = '';
+    let ordersContext = '';
+    try {
+        const [pCtx, bInfo, userOrders] = await Promise.all([
+            formatProductsForAI(),
+            getBusinessInfoForAI(),
+            getOrdersByPhone(userId)
+        ]);
+        productContext = pCtx;
+        businessInfo = bInfo;
+        if (userOrders && userOrders.length > 0) {
+            ordersContext = userOrders.map(o => `Ref: ${o.ref} | Items: ${o.items} | Status: ${o.status}`).join('\n');
+        }
+    } catch (e) {
+        console.error('⚠️  Sheets error in analyzeAudio:', e.message);
+    }
+
+    const systemPrompt = getSystemPrompt(productContext, businessInfo, ordersContext);
+    const model = genAI.getGenerativeModel({ model: MODEL_NAME });
+
+    const prompt = `${systemPrompt}
+
+A customer has sent a **voice note/audio message**. Listen to it carefully and:
+1. Understand their intent (asking about a product, delivery, etc.).
+2. Respond naturally in TEXT format. Match their spoken language (if they speak Malayalam, reply in Manglish text. If English, reply in English text).
+3. Be super helpful and assist them with their purchase. Keep it short and friendly.`;
+
+    try {
+        const result = await model.generateContent([
+            { text: prompt },
+            { inlineData: { data: audioBase64, mimeType } },
+        ]);
+
+        const reply = result.response.text().trim();
+        addToHistory(userId, 'user', '[Customer sent an audio message]');
+        addToHistory(userId, 'model', reply);
+        return reply;
+    } catch (err) {
+        console.error('❌ Audio processing error:', err.message);
+        throw err;
+    }
+}
+
+/**
  * Quick one-shot AI reply (for IG/FB comments).
  */
 async function quickReply(prompt) {
-    const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
+    const model = genAI.getGenerativeModel({ model: MODEL_NAME });
     const result = await model.generateContent(prompt);
     return result.response.text().trim();
 }
 
-module.exports = { chat, analyzeImage, quickReply };
+module.exports = { chat, analyzeImage, analyzeAudio, quickReply };
