@@ -336,14 +336,39 @@ async function processPurchase(from, session, method = 'upi') {
         orderRef = `ORD-${from}-${Date.now()}`;
     }
 
-    const { text } = buildPaymentMessage({
-        items: session.cart,
-        total,
-        phone: from,
+    // Save to payment store for the redirect page
+    const { savePayment } = require('../pay/store');
+    const productName = session.cart.map((i) => `${i.name} x${i.qty || 1}`).join(', ');
+    savePayment(orderRef, {
+        storeName: config.storeName || 'Fun bin',
+        amount: total,
+        productName,
+        upiId: config.upiId,
+        upiLink,
         orderRef,
     });
 
-    // Clear cart after order is placed
+    // Generate clickable HTTPS payment link
+    const baseUrl = process.env.RENDER_EXTERNAL_URL || `https://funbin-salesbot.onrender.com`;
+    const payLink = `${baseUrl}/pay/${orderRef}`;
+
+    const itemLines = session.cart
+        .map((i) => `  • ${i.name} x${i.qty || 1} — ₹${i.price * (i.qty || 1)}`)
+        .join('\n');
+
+    const text =
+        `🧾 *Order Confirmed!*\n` +
+        `━━━━━━━━━━━━━━━━━━\n` +
+        `${itemLines}\n` +
+        `━━━━━━━━━━━━━━━━━━\n` +
+        `💰 *Total: ₹${total}*\n\n` +
+        `📲 *Click to Pay ↓*\n` +
+        `${payLink}\n\n` +
+        `☝️ Link click cheythu GPay / PhonePe / Paytm-il pay cheyyuka\n\n` +
+        `Payment screenshot ayakkoo! ✅\n` +
+        `🔑 Ref: \`${orderRef}\``;
+
+    // Clear cart
     updateSession(from, { cart: [] });
 
     return waSender.sendText(from, text);

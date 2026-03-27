@@ -1,6 +1,7 @@
 require('dotenv').config();
 const express = require('express');
 const webhookRouter = require('./webhook');
+const payRouter = require('./pay/routes');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -11,6 +12,7 @@ app.use(express.json());
 
 // Routes
 app.use('/webhook', webhookRouter);
+app.use('/pay', payRouter);
 
 app.get('/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });

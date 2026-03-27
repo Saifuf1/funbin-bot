@@ -6,6 +6,8 @@ const { formatProductsForAI } = require('../db/products');
 const { getBusinessInfoForAI } = require('../db/sheets');
 
 const genAI = new GoogleGenerativeAI(config.geminiApiKey);
+const MODEL_NAME = process.env.GEMINI_MODEL || 'gemini-1.5-flash';
+console.log(`🤖 Gemini model: ${MODEL_NAME}`);
 
 /**
  * Send a text message through Gemini with full conversation history.
@@ -27,11 +29,9 @@ async function chat(userId, userText) {
 
     const systemPrompt = getSystemPrompt(productContext, businessInfo);
 
-    // gemini-1.5-flash: 1500 req/day free vs gemini-2.0-flash: 200 req/day — much better for free tier
-    const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
+    const model = genAI.getGenerativeModel({ model: MODEL_NAME });
 
     // Build history — inject system prompt as the very first turn
-    // This avoids the systemInstruction + history incompatibility in SDK 0.21.0
     const history = [
         {
             role: 'user',
@@ -53,14 +53,26 @@ async function chat(userId, userText) {
     });
 
     console.log(`🤖 Gemini call — user: ${userId}, msg: "${userText.slice(0, 50)}"`);
-    const result = await chatSession.sendMessage(userText);
+
+    // Retry once on 429 (quota) with 3s delay
+    let result;
+    try {
+        result = await chatSession.sendMessage(userText);
+    } catch (err) {
+        if (err.message?.includes('429')) {
+            console.warn('⚠️  Gemini quota hit, retrying in 3s...');
+            await new Promise((r) => setTimeout(r, 3000));
+            result = await chatSession.sendMessage(userText);
+        } else {
+            throw err;
+        }
+    }
+
     const reply = result.response.text().trim();
     console.log(`🤖 Gemini reply: "${reply.slice(0, 80)}..."`);
 
-    // Save to history
     addToHistory(userId, 'user', userText);
     addToHistory(userId, 'model', reply);
-
     return reply;
 }
 
@@ -80,7 +92,7 @@ async function analyzeImage(imageBase64, mimeType, userId) {
     }
 
     const systemPrompt = getSystemPrompt(productContext, businessInfo);
-    const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
+    const model = genAI.getGenerativeModel({ model: MODEL_NAME });
 
     const prompt = `${systemPrompt}
 
