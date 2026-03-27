@@ -1,12 +1,18 @@
 /**
  * Generates the HTML for the UPI payment redirect page.
- * Minimalist dark design that auto-opens the UPI app.
+ * Minimalist dark design with iOS/Android-specific UPI app handling.
  */
 
-function buildPaymentHTML({ storeName, amount, productName, upiId, upiLink, orderRef }) {
-    const shortRef = orderRef?.split('-').slice(-1)[0] || orderRef;
+function buildPaymentHTML({ storeName, amount, upiId, upiLink, orderRef, productName }) {
+  const shortRef = orderRef?.split('-').slice(-1)[0] || orderRef;
 
-    return `<!DOCTYPE html>
+  // Build individual app links for iOS
+  const upiParams = `pa=${encodeURIComponent(upiId)}&pn=${encodeURIComponent(storeName)}&am=${Number(amount).toFixed(2)}&tn=${encodeURIComponent(orderRef)}&cu=INR`;
+  const gpayLink = `tez://upi/pay?${upiParams}`;
+  const phonePeLink = `phonepe://pay?${upiParams}`;
+  const paytmLink = `paytmmp://pay?${upiParams}`;
+
+  return `<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
@@ -32,7 +38,7 @@ function buildPaymentHTML({ storeName, amount, productName, upiId, upiLink, orde
       background: #141414;
       border: 1px solid rgba(255, 255, 255, 0.08);
       border-radius: 24px;
-      padding: 40px 32px;
+      padding: 40px 28px;
       max-width: 420px;
       width: 100%;
       text-align: center;
@@ -49,11 +55,11 @@ function buildPaymentHTML({ storeName, amount, productName, upiId, upiLink, orde
       padding: 6px 16px;
       font-size: 13px;
       color: rgba(255, 255, 255, 0.6);
-      margin-bottom: 32px;
+      margin-bottom: 28px;
     }
 
     .amount {
-      font-size: 56px;
+      font-size: 52px;
       font-weight: 700;
       letter-spacing: -2px;
       line-height: 1;
@@ -65,47 +71,62 @@ function buildPaymentHTML({ storeName, amount, productName, upiId, upiLink, orde
     }
 
     .product-name {
-      font-size: 15px;
-      color: rgba(255, 255, 255, 0.5);
-      margin-bottom: 36px;
+      font-size: 14px;
+      color: rgba(255, 255, 255, 0.45);
+      margin-bottom: 32px;
       font-weight: 400;
     }
 
     .divider {
       height: 1px;
       background: rgba(255,255,255,0.07);
-      margin-bottom: 36px;
+      margin: 24px 0;
     }
 
-    .upi-btn {
+    /* ── Android: single Pay Now button ── */
+    .android-section { display: none; }
+    .android-section.show { display: block; }
+
+    /* ── iOS: individual app buttons ── */
+    .ios-section { display: none; }
+    .ios-section.show { display: block; }
+
+    .btn {
       display: block;
       width: 100%;
-      padding: 18px;
-      background: #2563eb;
+      padding: 16px;
       color: #fff;
       text-decoration: none;
       border-radius: 14px;
-      font-size: 16px;
+      font-size: 15px;
       font-weight: 600;
-      letter-spacing: -0.3px;
-      margin-bottom: 12px;
+      letter-spacing: -0.2px;
+      margin-bottom: 10px;
       cursor: pointer;
       border: none;
-      transition: background 0.2s, transform 0.1s;
+      transition: transform 0.1s;
+      text-align: center;
     }
+    .btn:active { transform: scale(0.98); }
 
-    .upi-btn:hover { background: #1d4ed8; }
-    .upi-btn:active { transform: scale(0.98); }
+    .btn-primary { background: #2563eb; }
+    .btn-primary:hover { background: #1d4ed8; }
 
-    .upi-btn.secondary {
+    .btn-gpay { background: linear-gradient(135deg, #4285F4, #34A853); }
+    .btn-phonepe { background: linear-gradient(135deg, #5f259f, #8236cb); }
+    .btn-paytm { background: linear-gradient(135deg, #002970, #0E4DA4); }
+
+    .btn-secondary {
       background: rgba(255,255,255,0.06);
       border: 1px solid rgba(255,255,255,0.1);
-      color: rgba(255,255,255,0.8);
+      color: rgba(255,255,255,0.7);
+      font-weight: 500;
     }
-    .upi-btn.secondary:hover { background: rgba(255,255,255,0.1); }
+
+    .btn-label { font-size: 12px; color: rgba(255,255,255,0.4); margin-bottom: 12px; }
 
     .upi-info {
-      margin-top: 28px;
+      margin-top: 4px;
       padding: 16px;
       background: rgba(255, 255, 255, 0.04);
       border-radius: 12px;
@@ -134,8 +155,22 @@ function buildPaymentHTML({ storeName, amount, productName, upiId, upiLink, orde
       font-family: 'SF Mono', 'Fira Code', monospace;
     }
 
+    .copy-btn {
+      background: rgba(255,255,255,0.08);
+      border: 1px solid rgba(255,255,255,0.1);
+      color: rgba(255,255,255,0.6);
+      font-size: 11px;
+      padding: 3px 10px;
+      border-radius: 6px;
+      cursor: pointer;
+      margin-left: 8px;
+      transition: background 0.15s;
+    }
+    .copy-btn:hover { background: rgba(255,255,255,0.15); }
+    .copy-btn.copied { background: #22c55e33; color: #22c55e; border-color: #22c55e44; }
+
     .status-bar {
-      margin-top: 28px;
+      margin-top: 24px;
       display: flex;
       align-items: center;
       justify-content: center;
@@ -145,9 +180,7 @@ function buildPaymentHTML({ storeName, amount, productName, upiId, upiLink, orde
     }
 
     .dot {
-      width: 6px;
-      height: 6px;
-      border-radius: 50%;
+      width: 6px; height: 6px; border-radius: 50%;
       background: #22c55e;
       animation: pulse 2s infinite;
     }
@@ -158,42 +191,23 @@ function buildPaymentHTML({ storeName, amount, productName, upiId, upiLink, orde
     }
 
     .footer {
-      margin-top: 28px;
+      margin-top: 24px;
       font-size: 12px;
       color: rgba(255,255,255,0.2);
+      line-height: 1.6;
     }
 
-    .redirect-notice {
-      font-size: 12px;
-      color: rgba(255,255,255,0.3);
-      margin-top: 12px;
+    .manual-section {
+      margin-top: 20px;
+      padding: 16px;
+      background: rgba(37, 99, 235, 0.06);
+      border: 1px solid rgba(37, 99, 235, 0.15);
+      border-radius: 12px;
+      text-align: left;
     }
-
-    /* App icon grid */
-    .apps {
-      display: flex;
-      justify-content: center;
-      gap: 20px;
-      margin-bottom: 24px;
-    }
-    .app-chip {
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      gap: 4px;
-      font-size: 11px;
-      color: rgba(255,255,255,0.4);
-    }
-    .app-icon {
-      width: 40px;
-      height: 40px;
-      border-radius: 10px;
-      background: rgba(255,255,255,0.07);
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      font-size: 20px;
-    }
+    .manual-title { font-size: 13px; font-weight: 600; margin-bottom: 10px; color: rgba(255,255,255,0.7); }
+    .manual-step { font-size: 12px; color: rgba(255,255,255,0.5); margin-bottom: 6px; line-height: 1.5; }
+    .manual-step strong { color: rgba(255,255,255,0.85); }
   </style>
 </head>
 <body>
@@ -203,62 +217,83 @@ function buildPaymentHTML({ storeName, amount, productName, upiId, upiLink, orde
     <div class="amount">₹${amount}</div>
     <div class="product-name">${productName}</div>
 
-    <div class="apps">
-      <div class="app-chip"><div class="app-icon">G</div>GPay</div>
-      <div class="app-chip"><div class="app-icon">📱</div>PhonePe</div>
-      <div class="app-chip"><div class="app-icon">P</div>Paytm</div>
+    <!-- Android: Auto-redirect + single button -->
+    <div class="android-section" id="androidSection">
+      <a class="btn btn-primary" id="payBtn" href="${upiLink}">
+        💳 Pay ₹${amount} with UPI
+      </a>
     </div>
 
-    <a class="upi-btn" id="payBtn" href="${upiLink}">
-      💳 Pay Now with UPI
-    </a>
-    <a class="upi-btn secondary" href="${upiLink}">
-      Open Payment App Manually
-    </a>
+    <!-- iOS: Individual app buttons -->
+    <div class="ios-section" id="iosSection">
+      <div class="btn-label">Choose your payment app</div>
+      <a class="btn btn-gpay" href="${gpayLink}">G Pay — Google Pay</a>
+      <a class="btn btn-phonepe" href="${phonePeLink}">📱 PhonePe</a>
+      <a class="btn btn-paytm" href="${paytmLink}">P Paytm</a>
+    </div>
 
     <div class="divider"></div>
 
+    <!-- Manual UPI fallback — always visible -->
+    <div class="manual-section">
+      <div class="manual-title">📋 Or pay manually:</div>
+      <div class="manual-step">1. Open any UPI app</div>
+      <div class="manual-step">2. UPI ID: <strong>${upiId}</strong>
+        <button class="copy-btn" onclick="copyUPI(this)">Copy</button>
+      </div>
+      <div class="manual-step">3. Amount: <strong>₹${amount}</strong></div>
+      <div class="manual-step">4. Note: <strong>${shortRef}</strong></div>
+    </div>
+
     <div class="upi-info">
-      <div class="upi-info-row">
-        <span class="upi-label">UPI ID</span>
-        <span class="upi-value">${upiId}</span>
-      </div>
-      <div class="upi-info-row">
-        <span class="upi-label">Amount</span>
-        <span class="upi-value">₹${amount}</span>
-      </div>
       <div class="upi-info-row">
         <span class="upi-label">Order Ref</span>
         <span class="upi-value">${shortRef}</span>
+      </div>
+      <div class="upi-info-row">
+        <span class="upi-label">UPI ID</span>
+        <span class="upi-value">${upiId}</span>
       </div>
     </div>
 
     <div class="status-bar">
       <div class="dot"></div>
-      Secure Payment
+      Secure UPI Payment
     </div>
 
     <div class="footer">
-      Pay cheythu kazhinju screenshot ayakkoo ✅<br/>
-      After paying, send the screenshot on WhatsApp
+      Payment cheythu kazhinju WhatsApp-il screenshot ayakkoo ✅
     </div>
   </div>
 
   <script>
-    // Auto-open UPI app after 800ms so page loads first
-    let opened = false;
-    function openUPI() {
-      if (opened) return;
-      opened = true;
-      window.location.href = '${upiLink}';
-    }
-    setTimeout(openUPI, 800);
+    // Detect iOS
+    var isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+    var isAndroid = /Android/.test(navigator.userAgent);
 
-    // Also trigger on button click (redundant but ensures click works)
-    document.getElementById('payBtn').addEventListener('click', function(e) {
-      e.preventDefault();
-      openUPI();
-    });
+    if (isIOS) {
+      document.getElementById('iosSection').classList.add('show');
+    } else {
+      // Android or desktop — show single UPI button + auto-redirect
+      document.getElementById('androidSection').classList.add('show');
+      if (isAndroid) {
+        setTimeout(function() {
+          window.location.href = '${upiLink}';
+        }, 800);
+      }
+    }
+
+    // Copy UPI ID
+    function copyUPI(btn) {
+      navigator.clipboard.writeText('${upiId}').then(function() {
+        btn.textContent = 'Copied!';
+        btn.classList.add('copied');
+        setTimeout(function() {
+          btn.textContent = 'Copy';
+          btn.classList.remove('copied');
+        }, 2000);
+      });
+    }
   </script>
 </body>
 </html>`;
