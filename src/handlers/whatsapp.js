@@ -1,7 +1,7 @@
 const waSender = require('../senders/whatsapp');
 const waMessages = require('../whatsapp/messages');
 const { generateUPILink, buildPaymentMessage, buildCODMessage } = require('../whatsapp/upi');
-const { chat, analyzeImage, analyzeAudio } = require('../ai/gemini');
+const { chat, analyzeImage, analyzeAudio, validateDeliveryAddress } = require('../ai/gemini');
 const { getOrCreateSession, updateSession, addToCart, getCartTotal } = require('../ai/context');
 const { getAllProducts, getCategories, getProductsByCategory, findProductBySKU, formatProductForCustomer } = require('../db/products');
 const { createOrder } = require('../db/orders');
@@ -127,9 +127,16 @@ async function handleTextMessage(from, customerName, text) {
 
     // Awaiting delivery address?
     if (session.awaitingAddress) {
-        updateSession(from, { awaitingAddress: false, deliveryAddress: text });
-        console.log(`🏠 Address received for ${from}: ${text}`);
-        return processPurchase(from, session, text);
+        const validation = await validateDeliveryAddress(text);
+
+        if (validation.valid) {
+            updateSession(from, { awaitingAddress: false, deliveryAddress: validation.formatted });
+            console.log(`🏠 Valid Address received for ${from}`);
+            return processPurchase(from, session, validation.formatted);
+        } else {
+            console.log(`⚠️ Invalid address attempt from ${from}`);
+            return waSender.sendText(from, validation.message);
+        }
     }
 
     const lower = text.toLowerCase().trim();

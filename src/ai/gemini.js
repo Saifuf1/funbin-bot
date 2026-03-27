@@ -182,4 +182,45 @@ async function quickReply(prompt) {
     return result.response.text().trim();
 }
 
-module.exports = { chat, analyzeImage, analyzeAudio, quickReply };
+/**
+ * Validate customer delivery address using Gemini.
+ */
+async function validateDeliveryAddress(text) {
+    const model = genAI.getGenerativeModel({ model: MODEL_NAME });
+
+    const prompt = `You are a strict address validation assistant for an Indian e-commerce store.
+The customer has provided this as their delivery details:
+"${text}"
+
+Check if this text contains ALL of the following:
+1. A Name
+2. A Street/House/Location
+3. A 6-digit Pincode
+4. A 10-digit Phone Number
+
+If ALL 4 are present, respond EXACTLY with:
+VALID_ADDRESS|||<Format the address nicely on multiple lines>
+
+If ANY are missing, respond EXACTLY with:
+MISSING_INFO|||<Politely ask the customer in Manglish to provide the specific missing details. Tell them to send all details together in one message.>
+
+Do not output any markdown code blocks. Just the raw string format.`;
+
+    try {
+        const result = await model.generateContent(prompt);
+        const reply = result.response.text().trim();
+
+        if (reply.startsWith('VALID_ADDRESS|||')) {
+            return { valid: true, formatted: reply.split('|||')[1].trim() };
+        } else if (reply.startsWith('MISSING_INFO|||')) {
+            return { valid: false, message: reply.split('|||')[1].trim() };
+        } else {
+            return { valid: false, message: "Please provide your Full Name, Address, Pincode, and Phone Number in a single message to proceed 🚚" };
+        }
+    } catch (e) {
+        console.error('Validation Error', e);
+        return { valid: false, message: "Oru issue und! Please type your full address with Pincode and Phone number." };
+    }
+}
+
+module.exports = { chat, analyzeImage, analyzeAudio, quickReply, validateDeliveryAddress };
