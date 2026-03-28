@@ -275,8 +275,15 @@ async function handleButtonReply(from, customerName, reply) {
 
     // BROWSE PRODUCTS
     if (id === 'browse_products') {
-        const msg = waMessages.buildCatalogMessage(from, `🛍️ Nammude shop nokku! Thazhe kanunna 'View Catalog' button click cheyyuka 👇`);
-        return waSender.sendInteractive(from, msg);
+        const { getAllProducts } = require('../db/products');
+        const products = await getAllProducts();
+
+        if (products.length === 0) {
+            return waSender.sendText(from, "Sorry, nammude shop ippo update aayikond irikkuva! 😅 Vare products udane varum!");
+        }
+
+        const listMsg = waMessages.buildCategoryMenu(from, products);
+        return waSender.sendInteractive(from, listMsg);
     }
 
     // TALK TO HUMAN
