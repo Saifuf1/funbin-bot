@@ -61,6 +61,12 @@ async function handleMessage({ from, customerName, message }) {
         return;
     }
 
+    // ── Order Message (Catalog Checkout) ───────────────────────────────────
+    if (msgType === 'order') {
+        await handleOrderMessage(from, customerName, message.order);
+        return;
+    }
+
     // ── Sticker / Video — fallback ────────────────────────────────────────
     await waSender.sendText(
         from,
@@ -269,12 +275,8 @@ async function handleButtonReply(from, customerName, reply) {
 
     // BROWSE PRODUCTS
     if (id === 'browse_products') {
-        const products = await getAllProducts();
-        if (!products.length) {
-            return waSender.sendText(from, `Products currently loading. Oru minute! 😊`);
-        }
-        const listMsg = waMessages.buildCategoryMenu(from, products);
-        return waSender.sendInteractive(from, listMsg);
+        const msg = waMessages.buildCatalogMessage(from, `🛍️ Nammude shop nokku! Thazhe kanunna 'View Catalog' button click cheyyuka 👇`);
+        return waSender.sendInteractive(from, msg);
     }
 
     // TALK TO HUMAN
@@ -313,6 +315,42 @@ async function handleButtonReply(from, customerName, reply) {
     } catch {
         await waSender.sendText(from, `Got it! Type your question and I'll help. 😊`);
     }
+}
+
+async function handleOrderMessage(from, customerName, order) {
+    console.log(`🛒 Order payload received from ${from}: ${order.product_items.length} items`);
+    const session = getOrCreateSession(from);
+
+    // Clear old cart just in case they are making a fresh order
+    session.cart = [];
+
+    // Add items from the Meta Catalog
+    for (const item of order.product_items) {
+        // The SKU is currently stored in product_retailer_id in the Catalog
+        const sku = item.product_retailer_id;
+        const product = await findProductBySKU(sku);
+        if (product) {
+            addToCart(from, product, parseInt(item.quantity) || 1);
+        } else {
+            console.warn(`⚠️ Catalog item SKU ${sku} not found in DB!`);
+        }
+    }
+
+    if (session.cart.length === 0) {
+        return waSender.sendText(from, `Cart empty aano? Oru issue und! 😅 Admin-ne contact cheyyuka.`);
+    }
+
+    const total = getCartTotal(from);
+
+    // Ask for Delivery Address (Standard Checkout Flow)
+    updateSession(from, { awaitingAddress: true });
+
+    return waSender.sendText(
+        from,
+        `🛒 *Cart Received (Total: ₹${total})*\n\n` +
+        `Eathu address-il anu delivery vendathu?\n` +
+        `Please provide: *Name, House/Street, Area/City, Pincode, and Phone number*`
+    );
 }
 
 async function handleListReply(from, customerName, reply) {

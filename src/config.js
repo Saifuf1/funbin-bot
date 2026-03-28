@@ -40,6 +40,7 @@ module.exports = {
     whatsappToken: process.env.WHATSAPP_TOKEN,
     whatsappPhoneNumberId: process.env.WHATSAPP_PHONE_NUMBER_ID,
     whatsappBusinessNumber: process.env.WHATSAPP_BUSINESS_NUMBER || '',
+    catalogId: process.env.CATALOG_ID || '1796322511327187', // Default to User's Catalogue_Products id
 
     // Gemini
     geminiApiKey: process.env.GEMINI_API_KEY,

@@ -151,10 +151,32 @@ function buildBuyNowButtons(to, product) {
     );
 }
 
+/**
+ * Build a native WhatsApp Catalog Message
+ * Sends a message with a "View Catalog" button that opens the full Meta Commerce Catalog.
+ */
+function buildCatalogMessage(to, bodyText) {
+    return {
+        messaging_product: 'whatsapp',
+        recipient_type: 'individual',
+        to,
+        type: 'interactive',
+        interactive: {
+            type: 'catalog_message',
+            body: { text: bodyText },
+            action: {
+                name: 'catalog_message'
+                // thumbnail_product_retailer_id is optional but good, leaving it out defaults to first item
+            }
+        }
+    };
+}
+
 module.exports = {
     buildListMessage,
     buildReplyButtons,
     buildCategoryMenu,
     buildWelcomeMenu,
     buildBuyNowButtons,
+    buildCatalogMessage
 };
