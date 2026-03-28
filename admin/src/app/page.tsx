@@ -29,6 +29,36 @@ const recentOrders = [
 ];
 
 export default function DashboardPage() {
+  const [data, setData] = React.useState<any>(null);
+  const [loading, setLoading] = React.useState(true);
+
+  React.useEffect(() => {
+    const fetchData = async () => {
+      try {
+        const password = localStorage.getItem("admin_password") || "admin123";
+        const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || ""}/admin/stats`, {
+          headers: { "Authorization": `Bearer ${password}` }
+        });
+        const json = await res.json();
+        setData(json);
+      } catch (err) {
+        console.error("Failed to fetch stats", err);
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchData();
+  }, []);
+
+  const displayStats = data?.stats || [
+    { label: "Total Revenue", value: "₹0", icon: DollarSign, trend: "0%", color: "text-emerald-500", bg: "bg-emerald-500/10" },
+    { label: "Active Orders", value: "0", icon: ShoppingBag, trend: "0", color: "text-blue-500", bg: "bg-blue-500/10" },
+    { label: "New Customers", value: "0", icon: Users, trend: "0%", color: "text-violet-500", bg: "bg-violet-500/10" },
+    { label: "AI Conversations", value: "0", icon: TrendingUp, trend: "0% success", color: "text-amber-500", bg: "bg-amber-500/10" },
+  ];
+
+  const displayOrders = data?.recentOrders || [];
+
   return (
     <DashboardShell>
       <div className="space-y-10">
@@ -38,15 +68,18 @@ export default function DashboardPage() {
             <h1 className="text-3xl font-bold tracking-tight text-white">Dashboard <span className="text-gradient decoration-4 italic">Overview</span></h1>
             <p className="mt-1 text-slate-400">Welcome back! Here is what's happening with Fun Bin today.</p>
           </div>
-          <button className="flex items-center gap-2 rounded-xl bg-white/5 px-4 py-2 text-sm font-medium text-white transition-all hover:bg-white/10 border border-white/5">
+          <button
+            onClick={() => window.location.reload()}
+            className="flex items-center gap-2 rounded-xl bg-white/5 px-4 py-2 text-sm font-medium text-white transition-all hover:bg-white/10 border border-white/5"
+          >
             <Clock className="h-4 w-4 text-slate-400" />
-            Last 24 Hours
+            Refresh Data
           </button>
         </div>
 
         {/* Stats Grid */}
         <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4">
-          {stats.map((stat, i) => (
+          {displayStats.map((stat: any, i: number) => (
             <motion.div
               key={stat.label}
               initial={{ opacity: 0, y: 20 }}
@@ -55,8 +88,11 @@ export default function DashboardPage() {
               className="glass-card group relative overflow-hidden rounded-2xl p-6"
             >
               <div className="flex items-center justify-between">
-                <div className={cn("rounded-xl p-2.5", stat.bg)}>
-                  <stat.icon className={cn("h-6 w-6", stat.color)} />
+                <div className={cn("rounded-xl p-2.5", stat.bg || "bg-blue-500/10")}>
+                  {stat.label === "Total Revenue" && <DollarSign className={cn("h-6 w-6", stat.color)} />}
+                  {stat.label === "Active Orders" && <ShoppingBag className={cn("h-6 w-6", stat.color)} />}
+                  {stat.label === "New Customers" && <Users className={cn("h-6 w-6", stat.color)} />}
+                  {stat.label === "AI Conversations" && <TrendingUp className={cn("h-6 w-6", stat.color)} />}
                 </div>
                 <div className="flex items-center gap-1 text-xs font-medium text-emerald-500">
                   <ArrowUpRight className="h-3 w-3" />
@@ -65,7 +101,9 @@ export default function DashboardPage() {
               </div>
               <div className="mt-4">
                 <p className="text-sm font-medium text-slate-400">{stat.label}</p>
-                <h3 className="mt-1 text-2xl font-bold text-white tracking-tight">{stat.value}</h3>
+                <h3 className="mt-1 text-2xl font-bold text-white tracking-tight">
+                  {loading ? "..." : stat.value}
+                </h3>
               </div>
             </motion.div>
           ))}
@@ -82,7 +120,7 @@ export default function DashboardPage() {
           >
             <div className="flex items-center justify-between border-b border-white/5 px-6 py-5">
               <h2 className="text-lg font-semibold text-white">Recent Orders</h2>
-              <button className="text-sm font-medium text-blue-500 hover:text-blue-400 transition-colors">View All</button>
+              <a href="/orders" className="text-sm font-medium text-blue-500 hover:text-blue-400 transition-colors">View All</a>
             </div>
             <div className="overflow-x-auto">
               <table className="w-full text-left">
@@ -96,27 +134,33 @@ export default function DashboardPage() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-white/5">
-                  {recentOrders.map((order) => (
-                    <tr key={order.id} className="group hover:bg-white/[0.02] transition-colors">
-                      <td className="px-6 py-4 text-sm font-mono text-slate-400">{order.id}</td>
-                      <td className="px-6 py-4">
-                        <div className="text-sm font-medium text-white">{order.customer}</div>
-                        <div className="text-xs text-slate-500">{order.time}</div>
-                      </td>
-                      <td className="px-6 py-4 text-sm text-slate-300">{order.product}</td>
-                      <td className="px-6 py-4">
-                        <span className={cn(
-                          "inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium",
-                          order.status === "Paid" ? "bg-emerald-500/10 text-emerald-500" :
-                            order.status === "Pending" ? "bg-amber-500/10 text-amber-500" :
-                              "bg-blue-500/10 text-blue-500"
-                        )}>
-                          {order.status}
-                        </span>
-                      </td>
-                      <td className="px-6 py-4 text-sm font-bold text-white">{order.amount}</td>
-                    </tr>
-                  ))}
+                  {loading ? (
+                    <tr><td colSpan={5} className="px-6 py-10 text-center text-slate-500">Loading orders...</td></tr>
+                  ) : displayOrders.length === 0 ? (
+                    <tr><td colSpan={5} className="px-6 py-10 text-center text-slate-500">No recent orders found.</td></tr>
+                  ) : (
+                    displayOrders.slice(0, 5).map((order: any) => (
+                      <tr key={order.id} className="group hover:bg-white/[0.02] transition-colors">
+                        <td className="px-6 py-4 text-sm font-mono text-slate-400">{order.id}</td>
+                        <td className="px-6 py-4">
+                          <div className="text-sm font-medium text-white">{order.customer}</div>
+                          <div className="text-xs text-slate-500">{order.time || "Recently"}</div>
+                        </td>
+                        <td className="px-6 py-4 text-sm text-slate-300">{order.product}</td>
+                        <td className="px-6 py-4">
+                          <span className={cn(
+                            "inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium",
+                            order.status === "Paid" ? "bg-emerald-500/10 text-emerald-500" :
+                              order.status === "Pending" ? "bg-amber-500/10 text-amber-500" :
+                                "bg-blue-500/10 text-blue-500"
+                          )}>
+                            {order.status}
+                          </span>
+                        </td>
+                        <td className="px-6 py-4 text-sm font-bold text-white">{order.amount}</td>
+                      </tr>
+                    ))
+                  )}
                 </tbody>
               </table>
             </div>
@@ -135,13 +179,16 @@ export default function DashboardPage() {
                 <div className="flex items-center justify-between rounded-xl bg-white/5 p-4 border border-white/5">
                   <div>
                     <div className="text-sm font-medium text-white">AI-Powered Replies</div>
-                    <div className="text-xs text-slate-500 font-mono">Status: ACTIVE</div>
+                    <div className="text-xs text-slate-500 font-mono">Status: {data?.aiEnabled ? "ACTIVE" : "DISABLED"}</div>
                   </div>
-                  <div className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
+                  <div className={cn("h-2 w-2 rounded-full animate-pulse", data?.aiEnabled ? "bg-emerald-500" : "bg-red-500")} />
                 </div>
-                <button className="w-full rounded-xl bg-blue-600 py-2.5 text-sm font-bold text-white shadow-lg shadow-blue-500/20 transition-all hover:bg-blue-700 active:scale-95">
+                <a
+                  href="/ai-control"
+                  className="block w-full text-center rounded-xl bg-blue-600 py-2.5 text-sm font-bold text-white shadow-lg shadow-blue-500/20 transition-all hover:bg-blue-700 active:scale-95"
+                >
                   Configure Bot
-                </button>
+                </a>
               </div>
             </div>
 
@@ -152,7 +199,7 @@ export default function DashboardPage() {
                   <Sparkles className="h-6 w-6 text-white" />
                 </div>
                 <div>
-                  <div className="text-sm font-bold text-white">Professional Sales Pro</div>
+                  <div className="text-sm font-bold text-white">{data?.aiMode || "Standard Mode"}</div>
                   <div className="text-xs text-slate-500">Optimizing for conversions</div>
                 </div>
               </div>

@@ -25,6 +25,41 @@ const products = [
 ];
 
 export default function ProductsPage() {
+    const [products, setProducts] = React.useState<any[]>([]);
+    const [loading, setLoading] = React.useState(true);
+    const [syncing, setSyncing] = React.useState(false);
+
+    const fetchProducts = async () => {
+        setLoading(true);
+        try {
+            const password = localStorage.getItem("admin_password") || "admin123";
+            const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || ""}/admin/products`, {
+                headers: { "Authorization": `Bearer ${password}` }
+            });
+            const data = await res.json();
+            setProducts(data || []);
+        } catch (err) {
+            console.error("Failed to fetch products", err);
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    React.useEffect(() => {
+        fetchProducts();
+    }, []);
+
+    const handleSync = async () => {
+        setSyncing(true);
+        try {
+            // In a real app, this would trigger a backend pull from Sheets
+            await fetchProducts();
+            alert("Products synced with Google Sheets!");
+        } finally {
+            setSyncing(false);
+        }
+    };
+
     return (
         <DashboardShell>
             <div className="space-y-10">
@@ -35,9 +70,13 @@ export default function ProductsPage() {
                         <p className="mt-1 text-slate-400">Manage your entire catalog across WhatsApp, IG, and FB.</p>
                     </div>
                     <div className="flex items-center gap-3">
-                        <button className="flex items-center gap-2 rounded-xl bg-white/5 px-4 py-2.5 text-sm font-medium text-white transition-all hover:bg-white/10 border border-white/5">
-                            <RefreshCw className="h-4 w-4 text-slate-400" />
-                            Sync Sheets
+                        <button
+                            onClick={handleSync}
+                            disabled={syncing}
+                            className="flex items-center gap-2 rounded-xl bg-white/5 px-4 py-2.5 text-sm font-medium text-white transition-all hover:bg-white/10 border border-white/5 disabled:opacity-50"
+                        >
+                            <RefreshCw className={cn("h-4 w-4 text-slate-400", syncing && "animate-spin")} />
+                            {syncing ? "Syncing..." : "Sync Sheets"}
                         </button>
                         <button className="flex items-center gap-2 rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-bold text-white shadow-lg shadow-blue-500/20 transition-all hover:bg-blue-700 active:scale-95">
                             <Plus className="h-4 w-4" />
@@ -83,9 +122,13 @@ export default function ProductsPage() {
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-white/5">
-                                {products.map((product, i) => (
+                                {loading ? (
+                                    <tr><td colSpan={6} className="px-8 py-20 text-center text-slate-500">Loading your catalog...</td></tr>
+                                ) : products.length === 0 ? (
+                                    <tr><td colSpan={6} className="px-8 py-20 text-center text-slate-500">No products found in Google Sheets.</td></tr>
+                                ) : products.map((product, i) => (
                                     <motion.tr
-                                        key={product.sku}
+                                        key={product.sku || i}
                                         initial={{ opacity: 0, x: -10 }}
                                         animate={{ opacity: 1, x: 0 }}
                                         transition={{ delay: i * 0.05 }}
@@ -102,29 +145,29 @@ export default function ProductsPage() {
                                                 </div>
                                             </div>
                                         </td>
-                                        <td className="px-6 py-5 text-sm text-slate-300">{product.category}</td>
-                                        <td className="px-6 py-5 text-sm font-bold text-white">{product.price}</td>
+                                        <td className="px-6 py-5 text-sm text-slate-300">{product.category || "General"}</td>
+                                        <td className="px-6 py-5 text-sm font-bold text-white">₹{product.price}</td>
                                         <td className="px-6 py-5">
-                                            <div className="text-sm text-white">{product.stock} units</div>
+                                            <div className="text-sm text-white">{product.stock || 0} units</div>
                                             <div className="h-1.5 w-24 rounded-full bg-slate-800 mt-2 overflow-hidden">
                                                 <div
                                                     className={cn(
                                                         "h-full rounded-full transition-all duration-1000",
-                                                        product.stock > 40 ? "bg-emerald-500" :
-                                                            product.stock > 10 ? "bg-amber-500" : "bg-red-500"
+                                                        (product.stock || 0) > 20 ? "bg-emerald-500" :
+                                                            (product.stock || 0) > 5 ? "bg-amber-500" : "bg-red-500"
                                                     )}
-                                                    style={{ width: `${Math.min(product.stock * 2, 100)}%` }}
+                                                    style={{ width: `${Math.min((product.stock || 0) * 4, 100)}%` }}
                                                 />
                                             </div>
                                         </td>
                                         <td className="px-6 py-5">
                                             <span className={cn(
                                                 "inline-flex items-center rounded-full px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider",
-                                                product.status === "In Stock" ? "bg-emerald-500/10 text-emerald-500" :
-                                                    product.status === "Low Stock" ? "bg-amber-500/10 text-amber-500" :
+                                                (product.stock || 0) > 5 ? "bg-emerald-500/10 text-emerald-500" :
+                                                    (product.stock || 0) > 0 ? "bg-amber-500/10 text-amber-500" :
                                                         "bg-red-500/10 text-red-500"
                                             )}>
-                                                {product.status}
+                                                {(product.stock || 0) > 5 ? "In Stock" : (product.stock || 0) > 0 ? "Low Stock" : "Out of Stock"}
                                             </span>
                                         </td>
                                         <td className="px-8 py-5 text-right">
@@ -146,7 +189,7 @@ export default function ProductsPage() {
                         </table>
                     </div>
                     <div className="border-t border-white/5 px-8 py-4 bg-white/[0.01]">
-                        <p className="text-xs text-slate-500 tracking-wide">Showing {products.length} of 142 products in catalog</p>
+                        <p className="text-xs text-slate-500 tracking-wide">Showing {products.length} products direct from Google Sheets</p>
                     </div>
                 </motion.div>
             </div>

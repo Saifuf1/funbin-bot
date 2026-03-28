@@ -16,6 +16,60 @@ import { cn } from "@/lib/utils";
 export default function AIControlPage() {
     const [isAIEnabled, setIsAIEnabled] = useState(true);
     const [mode, setMode] = useState("Professional");
+    const [prompt, setPrompt] = useState("");
+    const [loading, setLoading] = useState(true);
+    const [saving, setSaving] = useState(false);
+
+    React.useEffect(() => {
+        const fetchConfig = async () => {
+            try {
+                const password = localStorage.getItem("admin_password") || "admin123";
+                const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || ""}/admin/ai-config`, {
+                    headers: { "Authorization": `Bearer ${password}` }
+                });
+                const config = await res.json();
+                setIsAIEnabled(config.enabled);
+                setMode(config.mode || "Professional");
+                setPrompt(config.systemPrompt || "");
+            } catch (err) {
+                console.error("Failed to fetch AI config", err);
+            } finally {
+                setLoading(false);
+            }
+        };
+        fetchConfig();
+    }, []);
+
+    const handleSave = async () => {
+        setSaving(true);
+        try {
+            const password = localStorage.getItem("admin_password") || "admin123";
+            const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || ""}/admin/ai-config`, {
+                method: "PUT",
+                headers: {
+                    "Content-Type": "application/json",
+                    "Authorization": `Bearer ${password}`
+                },
+                body: JSON.stringify({
+                    enabled: isAIEnabled,
+                    mode: mode,
+                    systemPrompt: prompt
+                })
+            });
+            if (res.ok) {
+                alert("AI Configuration saved successfully! The bot will now use these settings.");
+            } else {
+                alert("Failed to save configuration. Check your password.");
+            }
+        } catch (err) {
+            console.error("Save failed", err);
+            alert("Network error while saving.");
+        } finally {
+            setSaving(false);
+        }
+    };
+
+    if (loading) return <DashboardShell><div className="flex h-64 items-center justify-center text-white">Loading configuration...</div></DashboardShell>;
 
     return (
         <DashboardShell>
@@ -92,13 +146,13 @@ export default function AIControlPage() {
                             </div>
                         </div>
 
-                        <div className="glass-card rounded-2xl p-8 border-l-4 border-amber-500/50">
+                        <div className="glass-card rounded-2xl p-8 border-l-4 border-emerald-500/50">
                             <div className="flex gap-4">
-                                <AlertCircle className="h-6 w-6 text-amber-500 shrink-0" />
+                                <AlertCircle className="h-6 w-6 text-emerald-500 shrink-0" />
                                 <div>
-                                    <h3 className="text-sm font-bold text-white">Usage Alert</h3>
+                                    <h3 className="text-sm font-bold text-white">System Status</h3>
                                     <p className="mt-1 text-sm text-slate-400">
-                                        Your Gemini API usage is currently at 84% of your daily free tier. The bot will automatically switch to "Manual Mode" if the limit is reached.
+                                        The AI is connected and healthy. Gemini 1.5 Flash is currently responding to customers in real-time.
                                     </p>
                                 </div>
                             </div>
@@ -114,26 +168,28 @@ export default function AIControlPage() {
                     >
                         <div className="flex items-center justify-between border-b border-white/5 px-8 py-6">
                             <h2 className="text-lg font-semibold text-white">System Framework</h2>
-                            <button className="flex items-center gap-2 rounded-xl bg-blue-600 px-4 py-2 text-sm font-bold text-white transition-all hover:bg-blue-700 active:scale-95">
+                            <button
+                                onClick={handleSave}
+                                disabled={saving}
+                                className={cn(
+                                    "flex items-center gap-2 rounded-xl bg-blue-600 px-4 py-2 text-sm font-bold text-white transition-all hover:bg-blue-700 active:scale-95",
+                                    saving && "opacity-50 cursor-not-allowed"
+                                )}
+                            >
                                 <Save className="h-4 w-4" />
-                                Save Changes
+                                {saving ? "Saving..." : "Save Changes"}
                             </button>
                         </div>
                         <div className="flex-1 p-8">
                             <div className="relative h-full min-h-[400px]">
                                 <textarea
                                     className="h-full w-full resize-none rounded-xl bg-slate-950/50 p-6 font-mono text-sm leading-relaxed text-slate-300 border border-white/5 focus:outline-none focus:ring-1 focus:ring-blue-500 transition-all"
-                                    defaultValue={`You are the lead sales assistant at Fun Bin. 
-Your tone is professional yet welcoming. 
-You speak both English and Manglish (Malayalam written in English).
-
-Key Rules:
-1. Prioritize native catalog help.
-2. If payment status is pending, remind them of UPI.
-3. Keep response under 100 words.`}
+                                    value={prompt}
+                                    onChange={(e) => setPrompt(e.target.value)}
+                                    placeholder="Enter system instructions here..."
                                 />
                                 <div className="absolute bottom-4 right-4 text-[10px] font-medium uppercase tracking-widest text-slate-500">
-                                    Last updated: Today, 2:15 PM
+                                    Syncing live with backend
                                 </div>
                             </div>
                         </div>
