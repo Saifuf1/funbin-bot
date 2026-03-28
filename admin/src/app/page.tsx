@@ -1,0 +1,165 @@
+"use client";
+
+import React from "react";
+import { DashboardShell } from "@/components/DashboardShell";
+import { motion } from "framer-motion";
+import {
+  TrendingUp,
+  Users,
+  ShoppingBag,
+  DollarSign,
+  ArrowUpRight,
+  Clock,
+  Sparkles
+} from "lucide-react";
+import { cn } from "@/lib/utils";
+
+const stats = [
+  { label: "Total Revenue", value: "₹45,231", icon: DollarSign, trend: "+12.5%", color: "text-emerald-500", bg: "bg-emerald-500/10" },
+  { label: "Active Orders", value: "12", icon: ShoppingBag, trend: "+3", color: "text-blue-500", bg: "bg-blue-500/10" },
+  { label: "New Customers", value: "148", icon: Users, trend: "+18%", color: "text-violet-500", bg: "bg-violet-500/10" },
+  { label: "AI Conversations", value: "1,240", icon: TrendingUp, trend: "98% success", color: "text-amber-500", bg: "bg-amber-500/10" },
+];
+
+const recentOrders = [
+  { id: "ORD-7342", customer: "Rahul K.", product: "Premium Cotton Shirt", status: "Paid", amount: "₹1,299", time: "2 mins ago" },
+  { id: "ORD-7341", customer: "Sneha M.", product: "Silk Saree (Red)", status: "Pending", amount: "₹3,450", time: "15 mins ago" },
+  { id: "ORD-7340", customer: "Anjali P.", product: "Handmade Necklace", status: "Paid", amount: "₹850", time: "1 hour ago" },
+  { id: "ORD-7339", customer: "Vikram S.", product: "Leather Wallet", status: "Shipped", amount: "₹599", time: "3 hours ago" },
+];
+
+export default function DashboardPage() {
+  return (
+    <DashboardShell>
+      <div className="space-y-10">
+        {/* Header */}
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-3xl font-bold tracking-tight text-white">Dashboard <span className="text-gradient decoration-4 italic">Overview</span></h1>
+            <p className="mt-1 text-slate-400">Welcome back! Here is what's happening with Fun Bin today.</p>
+          </div>
+          <button className="flex items-center gap-2 rounded-xl bg-white/5 px-4 py-2 text-sm font-medium text-white transition-all hover:bg-white/10 border border-white/5">
+            <Clock className="h-4 w-4 text-slate-400" />
+            Last 24 Hours
+          </button>
+        </div>
+
+        {/* Stats Grid */}
+        <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4">
+          {stats.map((stat, i) => (
+            <motion.div
+              key={stat.label}
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: i * 0.1 }}
+              className="glass-card group relative overflow-hidden rounded-2xl p-6"
+            >
+              <div className="flex items-center justify-between">
+                <div className={cn("rounded-xl p-2.5", stat.bg)}>
+                  <stat.icon className={cn("h-6 w-6", stat.color)} />
+                </div>
+                <div className="flex items-center gap-1 text-xs font-medium text-emerald-500">
+                  <ArrowUpRight className="h-3 w-3" />
+                  {stat.trend}
+                </div>
+              </div>
+              <div className="mt-4">
+                <p className="text-sm font-medium text-slate-400">{stat.label}</p>
+                <h3 className="mt-1 text-2xl font-bold text-white tracking-tight">{stat.value}</h3>
+              </div>
+            </motion.div>
+          ))}
+        </div>
+
+        {/* Main Section */}
+        <div className="grid grid-cols-1 gap-8 lg:grid-cols-3">
+          {/* Recent Orders Table */}
+          <motion.div
+            initial={{ opacity: 0, x: -20 }}
+            animate={{ opacity: 1, x: 0 }}
+            transition={{ delay: 0.4 }}
+            className="lg:col-span-2 glass-card rounded-2xl overflow-hidden"
+          >
+            <div className="flex items-center justify-between border-b border-white/5 px-6 py-5">
+              <h2 className="text-lg font-semibold text-white">Recent Orders</h2>
+              <button className="text-sm font-medium text-blue-500 hover:text-blue-400 transition-colors">View All</button>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="w-full text-left">
+                <thead>
+                  <tr className="border-b border-white/5 text-xs font-medium uppercase tracking-wider text-slate-500">
+                    <th className="px-6 py-4">Order ID</th>
+                    <th className="px-6 py-4">Customer</th>
+                    <th className="px-6 py-4">Product</th>
+                    <th className="px-6 py-4">Status</th>
+                    <th className="px-6 py-4">Amount</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-white/5">
+                  {recentOrders.map((order) => (
+                    <tr key={order.id} className="group hover:bg-white/[0.02] transition-colors">
+                      <td className="px-6 py-4 text-sm font-mono text-slate-400">{order.id}</td>
+                      <td className="px-6 py-4">
+                        <div className="text-sm font-medium text-white">{order.customer}</div>
+                        <div className="text-xs text-slate-500">{order.time}</div>
+                      </td>
+                      <td className="px-6 py-4 text-sm text-slate-300">{order.product}</td>
+                      <td className="px-6 py-4">
+                        <span className={cn(
+                          "inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium",
+                          order.status === "Paid" ? "bg-emerald-500/10 text-emerald-500" :
+                            order.status === "Pending" ? "bg-amber-500/10 text-amber-500" :
+                              "bg-blue-500/10 text-blue-500"
+                        )}>
+                          {order.status}
+                        </span>
+                      </td>
+                      <td className="px-6 py-4 text-sm font-bold text-white">{order.amount}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </motion.div>
+
+          {/* AI Activity / Quick Actions */}
+          <motion.div
+            initial={{ opacity: 0, x: 20 }}
+            animate={{ opacity: 1, x: 0 }}
+            transition={{ delay: 0.5 }}
+            className="space-y-8"
+          >
+            <div className="glass-card rounded-2xl p-6">
+              <h2 className="mb-4 text-lg font-semibold text-white">AI Control</h2>
+              <div className="space-y-4">
+                <div className="flex items-center justify-between rounded-xl bg-white/5 p-4 border border-white/5">
+                  <div>
+                    <div className="text-sm font-medium text-white">AI-Powered Replies</div>
+                    <div className="text-xs text-slate-500 font-mono">Status: ACTIVE</div>
+                  </div>
+                  <div className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
+                </div>
+                <button className="w-full rounded-xl bg-blue-600 py-2.5 text-sm font-bold text-white shadow-lg shadow-blue-500/20 transition-all hover:bg-blue-700 active:scale-95">
+                  Configure Bot
+                </button>
+              </div>
+            </div>
+
+            <div className="glass-card rounded-2xl p-6">
+              <h2 className="mb-4 text-lg font-semibold text-white">Current Mode</h2>
+              <div className="flex items-center gap-4">
+                <div className="h-12 w-12 rounded-full bg-gradient-to-br from-violet-600 to-indigo-600 flex items-center justify-center">
+                  <Sparkles className="h-6 w-6 text-white" />
+                </div>
+                <div>
+                  <div className="text-sm font-bold text-white">Professional Sales Pro</div>
+                  <div className="text-xs text-slate-500">Optimizing for conversions</div>
+                </div>
+              </div>
+            </div>
+          </motion.div>
+        </div>
+      </div>
+    </DashboardShell>
+  );
+}

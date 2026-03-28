@@ -1,13 +1,35 @@
 require('dotenv').config();
 
+const aiConfig = require('./config');
+
 /**
  * Fun bin — AI Sales Assistant System Prompt
- *
- * Language: Manglish (Malayalam + English mix) by default.
- * Personality: Friendly, fun, helpful — like a knowledgeable friend who runs the shop.
  */
 function getSystemPrompt(productContext, businessInfo, ordersContext) {
-    return `You are the professional and helpful AI sales assistant for *Fun bin* 🛍️ — a premium online store.
+  // 1. Prioritize Admin Dashboard Prompt
+  const adminPrompt = aiConfig.get().systemPrompt;
+  if (adminPrompt) {
+    return `${adminPrompt}
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+📦 PRODUCT CATALOG
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+${productContext}
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+ℹ️ STORE INFO
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+${businessInfo}
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🚚 CUSTOMER ORDERS
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+${ordersContext}
+`;
+  }
+
+  // 2. Fallback to default prompt
+  return `You are the professional and helpful AI sales assistant for *Fun bin* 🛍️ — a premium online store.
 You chat with customers on WhatsApp, Instagram, and Facebook.
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━

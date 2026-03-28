@@ -7,6 +7,7 @@ const { getAllProducts, getCategories, getProductsByCategory, findProductBySKU, 
 const { createOrder } = require('../db/orders');
 const config = require('../config');
 const axios = require('axios');
+const aiConfig = require('../ai/config');
 
 /**
  * Main WhatsApp message handler — the full AI shopping assistant.
@@ -177,6 +178,15 @@ async function handleTextMessage(from, customerName, text) {
 
     // AI Chat — main path
     try {
+        // [ADMIN CONTROL] Check if AI is enabled
+        if (!aiConfig.get().enabled) {
+            return waSender.sendText(
+                from,
+                `Namaskaram! 😊 Nammude automated system ippo off aanu.\n` +
+                `Nammude support team-ne wait cheyyaan namaskaram! Oru message leave cheyyuka, jaldi reply cheyyam! 🙏`
+            );
+        }
+
         console.log(`🤖 Calling Gemini for: ${from} | text: "${text.slice(0, 60)}"`);
         const reply = await chat(from, text);
         console.log(`🤖 Gemini reply ready, sending to ${from}`);

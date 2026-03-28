@@ -37,3 +37,18 @@ services:
         sync: false
       - key: STORE_NAME
         sync: false
+
+  - type: web
+    name: sales-bot-admin
+    env: node
+    plan: free
+    rootDir: admin
+    buildCommand: npm install && npm run build
+    startCommand: npm start
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: NEXT_PUBLIC_API_URL
+        sync: false # Set this to your backend's Render URL (e.g., https://funbin-salesbot.onrender.com)
+      - key: NEXT_PUBLIC_ADMIN_PASSWORD
+        sync: false # Set this to your ADMIN_PASSWORD

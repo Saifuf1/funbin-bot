@@ -77,4 +77,23 @@ async function getOrdersByPhone(phone) {
         }));
 }
 
-module.exports = { createOrder, updateOrderStatus, getOrdersByPhone };
+/**
+ * Get all orders from the Google Sheet
+ * @returns {Promise<Array>}
+ */
+async function getOrders() {
+    const sheet = await getOrdersSheet();
+    const rows = await sheet.getRows();
+    return rows.map((r) => ({
+        ref: r.get('OrderRef'),
+        customerName: r.get('CustomerName'),
+        phone: r.get('Phone'),
+        items: r.get('Items'),
+        amount: r.get('TotalAmount'),
+        status: r.get('Status'),
+        address: r.get('Address'),
+        createdAt: r.get('CreatedAt'),
+    }));
+}
+
+module.exports = { createOrder, updateOrderStatus, getOrdersByPhone, getOrders };
