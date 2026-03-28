@@ -140,13 +140,13 @@ export default function DashboardPage() {
                     <tr><td colSpan={5} className="px-6 py-10 text-center text-slate-500">No recent orders found.</td></tr>
                   ) : (
                     displayOrders.slice(0, 5).map((order: any) => (
-                      <tr key={order.id} className="group hover:bg-white/[0.02] transition-colors">
-                        <td className="px-6 py-4 text-sm font-mono text-slate-400">{order.id}</td>
+                      <tr key={order.ref} className="group hover:bg-white/[0.02] transition-colors">
+                        <td className="px-6 py-4 text-sm font-mono text-slate-400">{order.ref}</td>
                         <td className="px-6 py-4">
-                          <div className="text-sm font-medium text-white">{order.customer}</div>
-                          <div className="text-xs text-slate-500">{order.time || "Recently"}</div>
+                          <div className="text-sm font-medium text-white">{order.customerName}</div>
+                          <div className="text-xs text-slate-500">{order.createdAt || "Recently"}</div>
                         </td>
-                        <td className="px-6 py-4 text-sm text-slate-300">{order.product}</td>
+                        <td className="px-6 py-4 text-sm text-slate-300">{order.items}</td>
                         <td className="px-6 py-4">
                           <span className={cn(
                             "inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium",
@@ -157,7 +157,7 @@ export default function DashboardPage() {
                             {order.status}
                           </span>
                         </td>
-                        <td className="px-6 py-4 text-sm font-bold text-white">{order.amount}</td>
+                        <td className="px-6 py-4 text-sm font-bold text-white">₹{order.amount}</td>
                       </tr>
                     ))
                   )}

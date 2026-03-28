@@ -103,7 +103,7 @@ export default function OrdersPage() {
                     ) : (
                         orders.map((order, i) => (
                             <motion.div
-                                key={order.id || i}
+                                key={order.ref || i}
                                 initial={{ opacity: 0, y: 20 }}
                                 animate={{ opacity: 1, y: 0 }}
                                 transition={{ delay: i * 0.1 }}
@@ -123,18 +123,18 @@ export default function OrdersPage() {
 
                                     <div>
                                         <div className="flex items-center gap-3">
-                                            <span className="text-sm font-mono text-slate-500 uppercase tracking-tighter">{order.id}</span>
+                                            <span className="text-sm font-mono text-slate-500 uppercase tracking-tighter">{order.ref}</span>
                                             <span className="h-1 w-1 rounded-full bg-slate-700" />
-                                            <span className="text-xs text-slate-500">{order.date || "Just now"}</span>
+                                            <span className="text-xs text-slate-500">{order.createdAt || "Just now"}</span>
                                         </div>
-                                        <h3 className="text-lg font-bold text-white mt-1">{order.customer}</h3>
-                                        <p className="text-sm text-slate-400 mt-0.5">{order.product || order.items}</p>
+                                        <h3 className="text-lg font-bold text-white mt-1">{order.customerName}</h3>
+                                        <p className="text-sm text-slate-400 mt-0.5">{order.items}</p>
                                     </div>
                                 </div>
 
                                 <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:gap-10">
                                     <div className="text-left sm:text-right">
-                                        <div className="text-xl font-bold text-white">{order.amount}</div>
+                                        <div className="text-xl font-bold text-white">₹{order.amount}</div>
                                         <div className={cn(
                                             "mt-1 text-xs font-bold uppercase tracking-widest",
                                             order.status === "Paid" ? "text-emerald-500" :
