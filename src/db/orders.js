@@ -1,20 +1,12 @@
 const { getOrdersSheet } = require('./sheets');
 
 /**
- * Append a new order row to the Orders Google Sheet tab.
- * Columns: CustomerName, Phone, Items, TotalAmount, Status, PaymentLink, Address
- *
+ * Append a new order row to the Orders Google Sheet tab (scoped to client).
  * @param {object} order
- * @param {string} order.customerName
- * @param {string} order.phone
- * @param {string|Array} order.items - item list (array or comma-separated string)
- * @param {number} order.totalAmount
- * @param {string} order.paymentLink - UPI deep link
- * @param {string} order.address - Customer Delivery Address
- * @returns {Promise<string>} - Generated order reference (e.g. ORD-9876543210-1711401600)
+ * @param {string} order.sheetsId - The specific client spreadsheet ID
  */
-async function createOrder({ customerName, phone, items, totalAmount, paymentLink, address }) {
-    const sheet = await getOrdersSheet();
+async function createOrder({ customerName, phone, items, totalAmount, paymentLink, address, sheetsId }) {
+    const sheet = await getOrdersSheet(sheetsId);
 
     const orderRef = `ORD-${phone}-${Math.floor(Date.now() / 1000)}`;
     const itemsString = Array.isArray(items)
@@ -33,41 +25,37 @@ async function createOrder({ customerName, phone, items, totalAmount, paymentLin
         CreatedAt: new Date().toISOString(),
     });
 
-    console.log(`📦 Order created: ${orderRef}`);
+    console.log(`📦 [SaaS] Order created: ${orderRef} for client sheet: ${sheetsId?.slice(0, 8)}`);
     return orderRef;
 }
 
 /**
- * Update the status of an existing order by OrderRef
- * @param {string} orderRef
- * @param {string} newStatus - e.g. 'Paid', 'Shipped', 'Cancelled'
+ * Update the status of an existing order by OrderRef (scoped to client)
  */
-async function updateOrderStatus(orderRef, newStatus) {
-    const sheet = await getOrdersSheet();
+async function updateOrderStatus(orderRef, newStatus, sheetsId) {
+    const sheet = await getOrdersSheet(sheetsId);
     const rows = await sheet.getRows();
 
     const row = rows.find((r) => r.get('OrderRef') === orderRef);
     if (!row) {
-        console.warn(`⚠️  Order not found: ${orderRef}`);
+        console.warn(`⚠️  Order not found in sheet ${sheetsId}: ${orderRef}`);
         return false;
     }
 
     row.set('Status', newStatus);
     await row.save();
-    console.log(`✅ Order ${orderRef} status updated to: ${newStatus}`);
+    console.log(`✅ [SaaS] Order ${orderRef} updated to: ${newStatus}`);
     return true;
 }
 
 /**
- * Look up orders by phone number
- * @param {string} phone
- * @returns {Promise<Array>}
+ * Look up orders by phone number (scoped to client)
  */
-async function getOrdersByPhone(phone) {
-    const sheet = await getOrdersSheet();
+async function getOrdersByPhone(phone, sheetsId) {
+    const sheet = await getOrdersSheet(sheetsId);
     const rows = await sheet.getRows();
     return rows
-        .filter((r) => r.get('Phone') === phone)
+        .filter((r) => String(r.get('Phone')) === String(phone))
         .map((r) => ({
             ref: r.get('OrderRef'),
             items: r.get('Items'),
@@ -78,11 +66,10 @@ async function getOrdersByPhone(phone) {
 }
 
 /**
- * Get all orders from the Google Sheet
- * @returns {Promise<Array>}
+ * Get all orders from the Google Sheet (scoped to client)
  */
-async function getOrders() {
-    const sheet = await getOrdersSheet();
+async function getOrders(sheetsId) {
+    const sheet = await getOrdersSheet(sheetsId);
     const rows = await sheet.getRows();
     return rows.map((r) => ({
         ref: r.get('OrderRef'),

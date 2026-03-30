@@ -4,16 +4,17 @@ const config = require('../config');
 const BASE = config.graphApiBase;
 
 /**
- * Send a message to a Facebook Messenger user.
- *
+ * Send a message to a Facebook Messenger user (Multi-tenant).
  * @param {string} recipientId - PSID
  * @param {object|string} messageContent - Text or message object
+ * @param {object} client - The SaaS client context
  */
-async function sendMessage(recipientId, messageContent) {
-    const message =
-        typeof messageContent === 'string'
-            ? { text: messageContent }
-            : messageContent;
+async function sendMessage(recipientId, messageContent, client) {
+    const token = client?.pageAccessToken || config.pageAccessToken;
+
+    const message = typeof messageContent === 'string'
+        ? { text: messageContent }
+        : messageContent;
 
     try {
         const res = await axios.post(
@@ -23,11 +24,9 @@ async function sendMessage(recipientId, messageContent) {
                 message,
                 messaging_type: 'RESPONSE',
             },
-            {
-                params: { access_token: config.pageAccessToken },
-            }
+            { params: { access_token: token } }
         );
-        console.log(`✅ FB message sent to ${recipientId}`);
+        console.log(`✅ [SaaS] FB message sent to ${recipientId} (Client: ${client?.id})`);
         return res.data;
     } catch (err) {
         console.error('❌ FB message failed:', err.response?.data || err.message);

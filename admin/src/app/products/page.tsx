@@ -33,8 +33,12 @@ export default function ProductsPage() {
         setLoading(true);
         try {
             const password = localStorage.getItem("admin_password") || "admin123";
+            const clientId = "owner";
             const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || ""}/admin/products`, {
-                headers: { "Authorization": `Bearer ${password}` }
+                headers: {
+                    "Authorization": `Bearer ${password}`,
+                    "X-Client-Id": clientId
+                }
             });
             const data = await res.json();
             setProducts(data || []);

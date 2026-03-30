@@ -32,8 +32,12 @@ export default function OrdersPage() {
         const fetchOrders = async () => {
             try {
                 const password = localStorage.getItem("admin_password") || "admin123";
+                const clientId = "owner";
                 const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || ""}/admin/orders`, {
-                    headers: { "Authorization": `Bearer ${password}` }
+                    headers: {
+                        "Authorization": `Bearer ${password}`,
+                        "X-Client-Id": clientId
+                    }
                 });
                 const data = await res.json();
                 setOrders(data || []);

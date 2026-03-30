@@ -1,104 +1,78 @@
 const { getProductsSheet } = require('./sheets');
 
-// Cache products for 5 minutes to reduce API calls
-let productsCache = null;
-let cacheExpiry = 0;
+// Multi-Tenant Cache: Map SheetsId -> { data, expiry }
+const productsCache = {};
 const CACHE_TTL_MS = 5 * 60 * 1000;
 
 /**
- * Get all products from Google Sheets (with cache)
- * @returns {Promise<Array<{Name, Price, SKU, Material, ImageURL, StockStatus}>>}
+ * Get all products from Google Sheets (with per-client cache)
  */
-async function getAllProducts() {
-    if (productsCache && Date.now() < cacheExpiry) {
-        return productsCache;
+async function getAllProducts(sheetsId) {
+    const id = sheetsId || 'default';
+    if (productsCache[id] && Date.now() < productsCache[id].expiry) {
+        return productsCache[id].data;
     }
 
     try {
-        const sheet = await getProductsSheet();
+        const sheet = await getProductsSheet(sheetsId);
         const rows = await sheet.getRows();
 
-        productsCache = rows.map((row) => ({
+        const data = rows.map((row) => ({
             name: row.get('Name') || '',
             price: parseFloat(row.get('Price')) || 0,
             sku: row.get('SKU') || '',
             material: row.get('Material') || '',
-            imageUrl: row.get('Image') || row.get('ImageURL') || '', // supports both column names
+            imageUrl: row.get('Image') || row.get('ImageURL') || '',
             stockStatus: row.get('StockStatus') || 'Unknown',
             description: row.get('Description') || '',
         })).filter((p) => p.name);
 
-        cacheExpiry = Date.now() + CACHE_TTL_MS;
-        return productsCache;
+        productsCache[id] = {
+            data,
+            expiry: Date.now() + CACHE_TTL_MS
+        };
+        return data;
     } catch (err) {
-        console.error('❌ Error fetching products:', err.message);
-        return productsCache || [];
+        console.error(`❌ Error fetching products for client [${id}]:`, err.message);
+        return productsCache[id]?.data || [];
     }
 }
 
 /**
- * Find a product by name or SKU (case-insensitive fuzzy match)
+ * Find a product by exact SKU (scoped to client)
  */
-async function findProduct(query) {
-    const products = await getAllProducts();
-    const q = query.toLowerCase();
-    return products.find(
-        (p) =>
-            p.name.toLowerCase().includes(q) ||
-            p.sku.toLowerCase() === q ||
-            p.material.toLowerCase().includes(q)
-    );
-}
-
-/**
- * Find a product by exact SKU
- */
-async function findProductBySKU(sku) {
-    const products = await getAllProducts();
+async function findProductBySKU(sku, sheetsId) {
+    const products = await getAllProducts(sheetsId);
     return products.find((p) => p.sku.toLowerCase() === sku.toLowerCase());
 }
 
 /**
- * Get in-stock products only
+ * Get unique material/category list (scoped to client)
  */
-async function getInStockProducts() {
-    const products = await getAllProducts();
-    return products.filter(
-        (p) => p.stockStatus.toLowerCase() === 'in stock' || p.stockStatus.toLowerCase() === 'available'
-    );
+async function getCategories(sheetsId) {
+    const products = await getAllProducts(sheetsId);
+    return [...new Set(products.map((p) => p.material).filter(Boolean))];
 }
 
 /**
- * Get unique material/category list
+ * Get products by category/material (scoped to client)
  */
-async function getCategories() {
-    const products = await getAllProducts();
-    const cats = [...new Set(products.map((p) => p.material).filter(Boolean))];
-    return cats;
-}
-
-/**
- * Get products by category/material
- */
-async function getProductsByCategory(category) {
-    const products = await getAllProducts();
+async function getProductsByCategory(category, sheetsId) {
+    const products = await getAllProducts(sheetsId);
     return products.filter((p) =>
         p.material.toLowerCase().includes(category.toLowerCase())
     );
 }
 
 /**
- * Format product list as a readable text block for AI context injection
+ * Format product list for AI context (scoped to client)
  */
-async function formatProductsForAI() {
-    const products = await getAllProducts();
-    if (!products.length) return 'No products available in the catalog.';
+async function formatProductsForAI(sheetsId) {
+    const products = await getAllProducts(sheetsId);
+    if (!products.length) return 'No products available.';
 
     return products
-        .map(
-            (p) =>
-                `• ${p.name} (SKU: ${p.sku}) — ₹${p.price} | Material: ${p.material} | ${p.stockStatus}`
-        )
+        .map(p => `• ${p.name} (SKU: ${p.sku}) — ₹${p.price} | ${p.stockStatus}`)
         .join('\n');
 }
 
@@ -106,30 +80,21 @@ async function formatProductsForAI() {
  * Format a single product as a customer-friendly message
  */
 function formatProductForCustomer(p) {
-    const stock =
-        p.stockStatus.toLowerCase() === 'in stock' ? '✅ In Stock' : '❌ Out of Stock';
-    return (
-        `*${p.name}*\n` +
-        `💰 Price: ₹${p.price}\n` +
-        `🧵 Material: ${p.material}\n` +
-        `${stock}\n` +
-        `🔑 SKU: ${p.sku}`
-    );
+    const stock = p.stockStatus.toLowerCase() === 'in stock' ? '✅ In Stock' : '❌ Out of Stock';
+    return `*${p.name}*\n💰 Price: ₹${p.price}\n🧵 Material: ${p.material}\n${stock}\n🔑 SKU: ${p.sku}`;
 }
 
 /**
- * Invalidate cache (e.g., after an order changes stock status)
+ * Invalidate cache for a specific client
  */
-function invalidateCache() {
-    productsCache = null;
-    cacheExpiry = 0;
+function invalidateCache(sheetsId) {
+    const id = sheetsId || 'default';
+    delete productsCache[id];
 }
 
 module.exports = {
     getAllProducts,
-    findProduct,
     findProductBySKU,
-    getInStockProducts,
     getCategories,
     getProductsByCategory,
     formatProductsForAI,

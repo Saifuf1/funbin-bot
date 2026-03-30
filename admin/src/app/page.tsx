@@ -36,8 +36,12 @@ export default function DashboardPage() {
     const fetchData = async () => {
       try {
         const password = localStorage.getItem("admin_password") || "admin123";
+        const clientId = "owner"; // In a real SaaS, this would come from a context/selector
         const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || ""}/admin/stats`, {
-          headers: { "Authorization": `Bearer ${password}` }
+          headers: {
+            "Authorization": `Bearer ${password}`,
+            "X-Client-Id": clientId
+          }
         });
         const json = await res.json();
         setData(json);
@@ -50,7 +54,12 @@ export default function DashboardPage() {
     fetchData();
   }, []);
 
-  const displayStats = data?.stats || [
+  const displayStats = data ? [
+    { label: "Total Revenue", value: data.revenue || "₹0", icon: DollarSign, trend: "+0%", color: "text-emerald-500", bg: "bg-emerald-500/10" },
+    { label: "Active Orders", value: String(data.ordersCount || 0), icon: ShoppingBag, trend: "Stable", color: "text-blue-500", bg: "bg-blue-500/10" },
+    { label: "Products", value: String(data.productsCount || 0), icon: Users, trend: "Sync OK", color: "text-violet-500", bg: "bg-violet-500/10" },
+    { label: "AI Status", value: data.aiStats?.enabled ? "Online" : "Off", icon: TrendingUp, trend: data.aiStats?.mode || "Auto", color: "text-amber-500", bg: "bg-amber-500/10" },
+  ] : [
     { label: "Total Revenue", value: "₹0", icon: DollarSign, trend: "0%", color: "text-emerald-500", bg: "bg-emerald-500/10" },
     { label: "Active Orders", value: "0", icon: ShoppingBag, trend: "0", color: "text-blue-500", bg: "bg-blue-500/10" },
     { label: "New Customers", value: "0", icon: Users, trend: "0%", color: "text-violet-500", bg: "bg-violet-500/10" },
@@ -179,9 +188,9 @@ export default function DashboardPage() {
                 <div className="flex items-center justify-between rounded-xl bg-white/5 p-4 border border-white/5">
                   <div>
                     <div className="text-sm font-medium text-white">AI-Powered Replies</div>
-                    <div className="text-xs text-slate-500 font-mono">Status: {data?.aiEnabled ? "ACTIVE" : "DISABLED"}</div>
+                    <div className="text-xs text-slate-500 font-mono">Status: {data?.aiStats?.enabled ? "ACTIVE" : "DISABLED"}</div>
                   </div>
-                  <div className={cn("h-2 w-2 rounded-full animate-pulse", data?.aiEnabled ? "bg-emerald-500" : "bg-red-500")} />
+                  <div className={cn("h-2 w-2 rounded-full animate-pulse", data?.aiStats?.enabled ? "bg-emerald-500" : "bg-red-500")} />
                 </div>
                 <a
                   href="/ai-control"
@@ -199,7 +208,7 @@ export default function DashboardPage() {
                   <Sparkles className="h-6 w-6 text-white" />
                 </div>
                 <div>
-                  <div className="text-sm font-bold text-white">{data?.aiMode || "Standard Mode"}</div>
+                  <div className="text-sm font-bold text-white">{data?.aiStats?.mode || "Standard Mode"}</div>
                   <div className="text-xs text-slate-500">Optimizing for conversions</div>
                 </div>
               </div>

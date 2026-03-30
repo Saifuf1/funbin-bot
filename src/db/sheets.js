@@ -2,14 +2,15 @@ const { GoogleSpreadsheet } = require('google-spreadsheet');
 const { JWT } = require('google-auth-library');
 const config = require('../config');
 
-let doc = null;
-let sheetsCache = {};
+// Multi-Tenant Cache: Map SheetsId -> { doc, sheets: { title -> sheet } }
+const docsCache = {};
 
 /**
- * Get authenticated Google Spreadsheet instance (lazy init + singleton)
+ * Get authenticated Google Spreadsheet instance for a specific sheet ID
  */
-async function getDoc() {
-    if (doc) return doc;
+async function getDoc(sheetsId) {
+    const id = sheetsId || config.googleSheetsId;
+    if (docsCache[id] && docsCache[id].doc) return docsCache[id].doc;
 
     const auth = new JWT({
         email: config.googleServiceAccountEmail,
@@ -17,47 +18,53 @@ async function getDoc() {
         scopes: ['https://www.googleapis.com/auth/spreadsheets'],
     });
 
-    doc = new GoogleSpreadsheet(config.googleSheetsId, auth);
+    const doc = new GoogleSpreadsheet(id, auth);
     await doc.loadInfo();
-    console.log(`✅ Connected to Google Sheet: "${doc.title}"`);
+
+    if (!docsCache[id]) docsCache[id] = { sheets: {} };
+    docsCache[id].doc = doc;
+
+    console.log(`✅ [SaaS] Connected to Google Sheet: "${doc.title}" (ID: ${id.slice(0, 8)}...)`);
     return doc;
 }
 
 /**
- * Get a sheet by title (cached)
+ * Get a sheet by title (cached per-spreadsheet)
  */
-async function getSheet(title) {
-    if (sheetsCache[title]) return sheetsCache[title];
+async function getSheet(sheetsId, title) {
+    const id = sheetsId || config.googleSheetsId;
+    if (docsCache[id]?.sheets?.[title]) return docsCache[id].sheets[title];
 
-    const spreadsheet = await getDoc();
+    const spreadsheet = await getDoc(id);
     const sheet = spreadsheet.sheetsByTitle[title];
     if (!sheet) {
-        throw new Error(`Sheet tab "${title}" not found in spreadsheet`);
+        throw new Error(`Sheet tab "${title}" not found in spreadsheet ${id}`);
     }
-    sheetsCache[title] = sheet;
+
+    docsCache[id].sheets[title] = sheet;
     return sheet;
 }
 
 /**
  * Get all rows from the Products tab
  */
-async function getProductsSheet() {
-    return getSheet('Products');
+async function getProductsSheet(sheetsId) {
+    return getSheet(sheetsId, 'Products');
 }
 
 /**
  * Get all rows from the Orders tab
  */
-async function getOrdersSheet() {
-    return getSheet('Orders');
+async function getOrdersSheet(sheetsId) {
+    return getSheet(sheetsId, 'Orders');
 }
 
 /**
- * Get business info as a formatted string for AI context
+ * Get business info for a specific client
  */
-async function getBusinessInfoForAI() {
+async function getBusinessInfoForAI(sheetsId) {
     try {
-        const sheet = await getSheet('BusinessInfo');
+        const sheet = await getSheet(sheetsId, 'BusinessInfo');
         const rows = await sheet.getRows();
         if (!rows.length) return 'No specific business info available.';
 
@@ -66,7 +73,7 @@ async function getBusinessInfoForAI() {
             .filter(Boolean)
             .join('\n');
     } catch (err) {
-        console.error('⚠️  Could not load BusinessInfo sheet:', err.message);
+        console.error('⚠️  BusinessInfo error:', err.message);
         return 'Business info temporarily unavailable.';
     }
 }

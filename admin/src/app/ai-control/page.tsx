@@ -24,8 +24,12 @@ export default function AIControlPage() {
         const fetchConfig = async () => {
             try {
                 const password = localStorage.getItem("admin_password") || "admin123";
+                const clientId = "owner";
                 const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || ""}/admin/ai-config`, {
-                    headers: { "Authorization": `Bearer ${password}` }
+                    headers: {
+                        "Authorization": `Bearer ${password}`,
+                        "X-Client-Id": clientId
+                    }
                 });
                 const config = await res.json();
                 setIsAIEnabled(config.enabled);
@@ -44,11 +48,13 @@ export default function AIControlPage() {
         setSaving(true);
         try {
             const password = localStorage.getItem("admin_password") || "admin123";
+            const clientId = "owner";
             const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || ""}/admin/ai-config`, {
                 method: "PUT",
                 headers: {
                     "Content-Type": "application/json",
-                    "Authorization": `Bearer ${password}`
+                    "Authorization": `Bearer ${password}`,
+                    "X-Client-Id": clientId
                 },
                 body: JSON.stringify({
                     enabled: isAIEnabled,

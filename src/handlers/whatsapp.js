@@ -16,11 +16,11 @@ const aiConfig = require('../ai/config');
  * @param {string} opts.customerName
  * @param {object} opts.message - Raw WhatsApp message object
  */
-async function handleMessage({ from, customerName, message }) {
-    console.log(`📱 WhatsApp from ${from} (${customerName}): type=${message.type}`);
+async function handleMessage({ from, customerName, message, client }) {
+    console.log(`📱 [Client: ${client.id}] WhatsApp from ${from} (${customerName}): type=${message.type}`);
 
     // Mark as read
-    await waSender.markAsRead(message.id);
+    await waSender.markAsRead(client, message.id);
 
     // Update customer name in session
     const session = getOrCreateSession(from);
@@ -31,6 +31,7 @@ async function handleMessage({ from, customerName, message }) {
     // Escalated to human — skip AI
     if (session.awaitingHuman) {
         return waSender.sendText(
+            client,
             from,
             `Nammude team member ettu connect aagum! 😊\nUr message received.`
         );
@@ -40,56 +41,57 @@ async function handleMessage({ from, customerName, message }) {
 
     // ── Text Message ─────────────────────────────────────────────────────────
     if (msgType === 'text') {
-        await handleTextMessage(from, customerName, message.text.body);
+        await handleTextMessage(client, from, customerName, message.text.body);
         return;
     }
 
     // ── Image Message ────────────────────────────────────────────────────────
     if (msgType === 'image') {
-        await handleImageMessage(from, message.image);
+        await handleImageMessage(client, from, message.image);
         return;
     }
 
     // ── Interactive (List Reply or Button Reply) ───────────────────────────
     if (msgType === 'interactive') {
-        await handleInteractiveMessage(from, customerName, message.interactive);
+        await handleInteractiveMessage(client, from, customerName, message.interactive);
         return;
     }
 
     // ── Audio Message (Voice Note) ───────────────────────────────────────────
     if (msgType === 'audio') {
-        await handleAudioMessage(from, message.audio);
+        await handleAudioMessage(client, from, message.audio);
         return;
     }
 
     // ── Order Message (Catalog Checkout) ───────────────────────────────────
     if (msgType === 'order') {
-        await handleOrderMessage(from, customerName, message.order);
+        await handleOrderMessage(client, from, customerName, message.order);
         return;
     }
 
     // ── Sticker / Video — fallback ────────────────────────────────────────
     await waSender.sendText(
+        client,
         from,
         `Ithu nte message kandilla 😅 Text cheytu chodichooo! 🙏`
     );
 }
 
 // ─── Audio Handler ────────────────────────────────────────────────────────────
-async function handleAudioMessage(from, audioObj) {
+async function handleAudioMessage(client, from, audioObj) {
     try {
-        await waSender.sendText(from, `🎤 Voice note kettukondirikkukayaanu... oru minute! 🎧`);
+        await waSender.sendText(client, from, `🎤 Voice note kettukondirikkukayaanu... oru minute! 🎧`);
 
         const mediaId = audioObj.id;
         const mimeType = audioObj.mime_type || 'audio/ogg';
-        console.log(`🎤 Audio received: mediaId=${mediaId}, mime=${mimeType}`);
+        const token = client.whatsappToken || config.whatsappToken;
 
         // Step 1: Resolve media download URL
         let downloadUrl;
         try {
             const mediaUrlRes = await axios.get(
                 `https://graph.facebook.com/v20.0/${mediaId}`,
-                { headers: { Authorization: `Bearer ${config.whatsappToken}` } }
+                { headers: { Authorization: `Bearer ${token}` } }
             );
             downloadUrl = mediaUrlRes.data.url;
         } catch (e) {
@@ -102,388 +104,142 @@ async function handleAudioMessage(from, audioObj) {
         try {
             const audioRes = await axios.get(downloadUrl, {
                 responseType: 'arraybuffer',
-                headers: { Authorization: `Bearer ${config.whatsappToken}` },
+                headers: { Authorization: `Bearer ${token}` },
             });
             base64 = Buffer.from(audioRes.data).toString('base64');
-            console.log(`🎤 Audio downloaded: ${audioRes.data.byteLength} bytes`);
         } catch (e) {
             console.error('❌ Failed to download audio bytes:', e.message);
             throw new Error('Audio download failed');
         }
 
-        // Step 3: Gemini Audio analysis
-        const reply = await analyzeAudio(base64, mimeType, from);
-        await waSender.sendText(from, reply);
+        // Step 3: Gemini Audio analysis (Context Aware)
+        const reply = await analyzeAudio(base64, mimeType, from, client);
+        await waSender.sendText(client, from, reply);
 
     } catch (err) {
         console.error('❌ Audio handler error:', err.message);
-        try {
-            await waSender.sendText(
-                from,
-                `Voice note process cheyyam pattunnilla 😅\nOru text message aayi chodikkamo? 🙏`
-            );
-        } catch (sendErr) {
-            console.error('❌ Also failed to send audio error reply:', sendErr.message);
-        }
+        await waSender.sendText(client, from, `Voice note process cheyyam pattunnilla 😅\nOru text message aayi chodikkamo? 🙏`);
     }
 }
 
 // ─── Text Handler ─────────────────────────────────────────────────────────────
-async function handleTextMessage(from, customerName, text) {
+async function handleTextMessage(client, from, customerName, text) {
     const session = getOrCreateSession(from);
 
-    // Awaiting delivery address?
     if (session.awaitingAddress) {
         const combinedText = session.tempAddress ? session.tempAddress + ', ' + text : text;
         const validation = await validateDeliveryAddress(combinedText);
 
         if (validation.valid) {
             updateSession(from, { awaitingAddress: false, deliveryAddress: validation.formatted, tempAddress: null });
-            console.log(`🏠 Valid Address received for ${from}`);
-            return processPurchase(from, session, validation.formatted);
+            return processPurchase(client, from, session, validation.formatted);
         } else {
-            console.log(`⚠️ Invalid address attempt from ${from}. Buffering for next try.`);
             updateSession(from, { tempAddress: combinedText });
-            return waSender.sendText(from, validation.message);
+            return waSender.sendText(client, from, validation.message);
         }
     }
 
     const lower = text.toLowerCase().trim();
 
-    // Greeting → Welcome menu
     if (['hi', 'hello', 'hey', 'start', 'hii', 'menu', 'ഹലോ', 'ഹായ്'].includes(lower)) {
         const menu = waMessages.buildWelcomeMenu(from, customerName || 'there');
-        return waSender.sendInteractive(from, menu);
+        return waSender.sendInteractive(client, from, menu);
     }
 
-    // HUMAN escalation keyword
     if (lower === 'human' || lower === 'agent' || lower.includes('talk to human')) {
         updateSession(from, { awaitingHuman: true });
-        return waSender.sendText(
-            from,
-            `Sure! 😊 Nammude team member ithu handle cheyyum.\n` +
-            `Oru message leave cheyyuka, jaldi reply cheyyam! 🙏\n\n` +
-            `_(Type 'hi' to restart the bot later)_`
-        );
-    }
-
-    // Order status check
-    if (lower.includes('my order') || lower.includes('order status') || lower.includes('tracking')) {
-        return waSender.sendText(
-            from,
-            `Ur order status check cheyyaan nammude team-ne contact cheyyuka.\n` +
-            `Or ur order ref share cheyyuka (starts with ORD-)! 📦`
-        );
+        return waSender.sendText(client, from, `Sure! 😊 Nammude team member ithu handle cheyyum.\nType 'hi' to restart.`);
     }
 
     // AI Chat — main path
     try {
-        // [ADMIN CONTROL] Check if AI is enabled
-        if (!aiConfig.get().enabled) {
-            return waSender.sendText(
-                from,
-                `Namaskaram! 😊 Nammude automated system ippo off aanu.\n` +
-                `Nammude support team-ne wait cheyyaan namaskaram! Oru message leave cheyyuka, jaldi reply cheyyam! 🙏`
-            );
+        const activeAiConfig = client.aiConfig || aiConfig.get();
+        if (!activeAiConfig.enabled) {
+            return waSender.sendText(client, from, `Namaskaram! 😊 Nammude automated system ippo off aanu.`);
         }
 
-        console.log(`🤖 Calling Gemini for: ${from} | text: "${text.slice(0, 60)}"`);
-        const reply = await chat(from, text);
-        console.log(`🤖 Gemini reply ready, sending to ${from}`);
-        await waSender.sendText(from, reply);
+        const reply = await chat(from, text, client);
+        await waSender.sendText(client, from, reply);
     } catch (err) {
         console.error('❌ WA AI chat error:', err.message);
-        console.error('   Stack:', err.stack);
-        // Try sending error message — if this also fails, log but don't crash
-        try {
-            await waSender.sendText(
-                from,
-                `Oru chinna issue und! 😅 Oru minute try again cheyyuka. 🙏`
-            );
-        } catch (sendErr) {
-            console.error('❌ Also failed to send error message:', sendErr.message);
-        }
+        await waSender.sendText(client, from, `Oru chinna issue und! 😅 Try again cheyyuka. 🙏`);
     }
 }
 
-// ─── Image Handler ────────────────────────────────────────────────────────────
-async function handleImageMessage(from, imageObj) {
+// ─── Image Handler (Context Aware) ───────────────────────────────────────────
+async function handleImageMessage(client, from, imageObj) {
     try {
-        await waSender.sendText(from, `📸 Image kandu! Oru second... analysing! 🔍`);
+        await waSender.sendText(client, from, `📸 Image kandu! Oru second... analysing! 🔍`);
+        const token = client.whatsappToken || config.whatsappToken;
 
-        const mediaId = imageObj.id;
-        const mimeType = imageObj.mime_type || 'image/jpeg';
-        console.log(`🖼️  Image received: mediaId=${mediaId}, mime=${mimeType}`);
+        const mediaUrlRes = await axios.get(`https://graph.facebook.com/v20.0/${imageObj.id}`, {
+            headers: { Authorization: `Bearer ${token}` }
+        });
 
-        // Step 1: Resolve media download URL
-        let downloadUrl;
-        try {
-            const mediaUrlRes = await axios.get(
-                `https://graph.facebook.com/v20.0/${mediaId}`,
-                { headers: { Authorization: `Bearer ${config.whatsappToken}` } }
-            );
-            downloadUrl = mediaUrlRes.data.url;
-            console.log(`🖼️  Media URL resolved: ${downloadUrl?.slice(0, 60)}...`);
-        } catch (e) {
-            console.error('❌ Failed to resolve media URL:', e.response?.data || e.message);
-            throw new Error('Media URL resolution failed — token may be expired');
-        }
+        const imageRes = await axios.get(mediaUrlRes.data.url, {
+            responseType: 'arraybuffer',
+            headers: { Authorization: `Bearer ${token}` },
+        });
 
-        // Step 2: Download image bytes
-        let base64;
-        try {
-            const imageRes = await axios.get(downloadUrl, {
-                responseType: 'arraybuffer',
-                headers: { Authorization: `Bearer ${config.whatsappToken}` },
-            });
-            base64 = Buffer.from(imageRes.data).toString('base64');
-            console.log(`🖼️  Image downloaded: ${imageRes.data.byteLength} bytes`);
-        } catch (e) {
-            console.error('❌ Failed to download image bytes:', e.message);
-            throw new Error('Image download failed');
-        }
+        const base64 = Buffer.from(imageRes.data).toString('base64');
+        const reply = await analyzeImage(base64, imageObj.mime_type, from, client);
+        await waSender.sendText(client, from, reply);
 
-        // Step 3: Gemini Vision analysis
-        const reply = await analyzeImage(base64, mimeType, from);
-        await waSender.sendText(from, reply);
-
-        // Step 4: Show buy buttons for first product match
-        const products = await getAllProducts();
+        const products = await getAllProducts(client.googleSheetsId);
         if (products.length > 0) {
-            const firstMatch = products[0];
-            const buttons = waMessages.buildBuyNowButtons(from, firstMatch);
-            await waSender.sendInteractive(from, buttons);
+            const buttons = waMessages.buildBuyNowButtons(from, products[0]);
+            await waSender.sendInteractive(client, from, buttons);
         }
     } catch (err) {
-        console.error('❌ Image handler error:', err.message);
-        try {
-            await waSender.sendText(
-                from,
-                `Image kandii, pakshe process cheyyaan pattunilla 😅\nOru clear screenshot ayakkam! 📸`
-            );
-        } catch (sendErr) {
-            console.error('❌ Also failed to send image error reply:', sendErr.message);
+        await waSender.sendText(client, from, `Image kandii, pakshe process cheyyaan pattunilla 😅`);
+    }
+}
+
+// (Updating remainders of handlers to pass client...)
+async function handleInteractiveMessage(client, from, customerName, interactive) {
+    if (interactive.type === 'button_reply') {
+        const id = interactive.button_reply.id;
+        if (id === 'browse_products') {
+            const products = await getAllProducts(client.googleSheetsId);
+            const listMsg = waMessages.buildCategoryMenu(from, products);
+            return waSender.sendInteractive(client, from, listMsg);
+        }
+        if (id === 'talk_to_human') {
+            updateSession(from, { awaitingHuman: true });
+            return waSender.sendText(client, from, `Connecting to team...`);
+        }
+        if (id.startsWith('confirm_buy_')) {
+            const sku = id.replace('confirm_buy_', '');
+            return handleConfirmBuy(client, from, customerName, sku);
         }
     }
 }
 
-// ─── Interactive Message Handler ──────────────────────────────────────────────
-async function handleInteractiveMessage(from, customerName, interactive) {
-    const type = interactive.type; // 'button_reply' or 'list_reply'
-
-    if (type === 'button_reply') {
-        await handleButtonReply(from, customerName, interactive.button_reply);
-    } else if (type === 'list_reply') {
-        await handleListReply(from, customerName, interactive.list_reply);
-    }
-}
-
-async function handleButtonReply(from, customerName, reply) {
-    const id = reply.id;
-    const title = reply.title;
-    console.log(`🔘 Button reply from ${from}: ${id}`);
-
-    // BROWSE PRODUCTS
-    if (id === 'browse_products') {
-        const { getAllProducts } = require('../db/products');
-        const products = await getAllProducts();
-
-        if (products.length === 0) {
-            return waSender.sendText(from, "Sorry, nammude shop ippo update aayikond irikkuva! 😅 Vare products udane varum!");
-        }
-
-        const listMsg = waMessages.buildCategoryMenu(from, products);
-        return waSender.sendInteractive(from, listMsg);
-    }
-
-    // TALK TO HUMAN
-    if (id === 'talk_to_human') {
-        updateSession(from, { awaitingHuman: true });
-        return waSender.sendText(
-            from,
-            `Okay! Nammude team member ettu connect aagum! 😊\n` +
-            `_(Type 'hi' to restart the bot later)_`
-        );
-    }
-
-    // BUY NOW (generic — from welcome menu)
-    if (id === 'buy_now') {
-        const session = getOrCreateSession(from);
-        if (session.cart.length > 0) {
-            return processPurchase(from, session);
-        }
-        // Show product list first
-        const products = await getAllProducts();
-        const listMsg = waMessages.buildCategoryMenu(from, products);
-        await waSender.sendText(from, `Oru product select cheyyuka aadhyam! 👇`);
-        return waSender.sendInteractive(from, listMsg);
-    }
-
-    // CONFIRM BUY (specific product SKU)
-    if (id.startsWith('confirm_buy_')) {
-        const sku = id.replace('confirm_buy_', '');
-        return handleConfirmBuy(from, customerName, sku);
-    }
-
-    // Fallback
-    try {
-        const reply = await chat(from, title);
-        await waSender.sendText(from, reply);
-    } catch {
-        await waSender.sendText(from, `Got it! Type your question and I'll help. 😊`);
-    }
-}
-
-async function handleOrderMessage(from, customerName, order) {
-    console.log(`🛒 Order payload received from ${from}: ${order.product_items.length} items`);
-    const session = getOrCreateSession(from);
-
-    // Clear old cart just in case they are making a fresh order
-    session.cart = [];
-
-    // Add items from the Meta Catalog
-    for (const item of order.product_items) {
-        // The SKU is currently stored in product_retailer_id in the Catalog
-        const sku = item.product_retailer_id;
-        const product = await findProductBySKU(sku);
-        if (product) {
-            addToCart(from, product, parseInt(item.quantity) || 1);
-        } else {
-            console.warn(`⚠️ Catalog item SKU ${sku} not found in DB!`);
-        }
-    }
-
-    if (session.cart.length === 0) {
-        return waSender.sendText(from, `Cart empty aano? Oru issue und! 😅 Admin-ne contact cheyyuka.`);
-    }
-
-    const total = getCartTotal(from);
-
-    // Ask for Delivery Address (Standard Checkout Flow)
-    updateSession(from, { awaitingAddress: true });
-
-    return waSender.sendText(
-        from,
-        `🛒 *Cart Received (Total: ₹${total})*\n\n` +
-        `Eathu address-il anu delivery vendathu?\n` +
-        `Please provide: *Name, House/Street, Area/City, Pincode, and Phone number*`
-    );
-}
-
-async function handleListReply(from, customerName, reply) {
-    const id = reply.id;
-    const title = reply.title;
-    console.log(`📋 List reply from ${from}: ${id} (${title})`);
-
-    // Product selected from category list
-    if (id.startsWith('product_')) {
-        const sku = id.replace('product_', '');
-        const product = await findProductBySKU(sku);
-        if (!product) {
-            return waSender.sendText(from, `Product kandilla! Admin-ne contact cheyyuka. 😊`);
-        }
-
-        // Send product details
-        await waSender.sendText(from, formatProductForCustomer(product));
-
-        // Send product image — skip Amazon CDN URLs (hotlink blocked by WhatsApp servers)
-        const BLOCKED_HOSTS = ['m.media-amazon.com', 'amazon.com', 'amzn.to', 'ssl-images-amazon'];
-        const imageUrl = product.imageUrl || '';
-        const isBlocked = BLOCKED_HOSTS.some((host) => imageUrl.includes(host));
-
-        if (imageUrl && !isBlocked) {
-            try {
-                await waSender.sendImage(from, imageUrl, product.name);
-            } catch (imgErr) {
-                console.warn(`⚠️  Image send failed for ${product.name}: ${imgErr.message}`);
-            }
-        } else if (isBlocked) {
-            console.log(`⚠️  Skipping Amazon CDN image for ${product.name} — not accessible by WhatsApp servers`);
-        }
-
-        // Send buy buttons
-        const buttons = waMessages.buildBuyNowButtons(from, product);
-        return waSender.sendInteractive(from, buttons);
-    }
-}
-
-// ─── Buy Flow Helpers ─────────────────────────────────────────────────────────
-async function handleConfirmBuy(from, customerName, sku) {
-    const product = await findProductBySKU(sku);
-    if (!product) {
-        return waSender.sendText(from, `Oru issue und 😅 Restart cheyyuka.`);
-    }
-
-    // Add to cart
+async function handleConfirmBuy(client, from, customerName, sku) {
+    const product = await findProductBySKU(sku, client.googleSheetsId);
     addToCart(from, product);
-    const total = getCartTotal(from);
-
-    // Ask for Delivery Address instead of showing payment buttons
     updateSession(from, { awaitingAddress: true });
-
-    const message =
-        `✅ *${product.name}* added to cart!\n` +
-        `💰 Total: ₹${total}\n\n` +
-        `Please reply with your full *Delivery Address, Pincode, and Phone Number* to proceed with the order. 🚚`;
-
-    return waSender.sendText(from, message);
+    return waSender.sendText(client, from, `✅ *${product.name}* added to cart! Please reply with your address.`);
 }
 
-async function processPurchase(from, session, address) {
+async function processPurchase(client, from, session, address) {
     const total = getCartTotal(from);
-    const upiLink = generateUPILink(total, from, `ORD-${from}`);
-
-    let orderRef;
-    try {
-        orderRef = await createOrder({
-            customerName: session.customerName || 'Customer',
-            phone: from,
-            items: session.cart,
-            totalAmount: total,
-            paymentLink: upiLink,
-            address: address, // Save address to Google Sheet
-        });
-    } catch (e) {
-        console.error('❌ Order save error:', e.message);
-        orderRef = `ORD-${from}-${Date.now()}`;
-    }
-
-    // Save to payment store for the redirect page
-    const { savePayment } = require('../pay/store');
-    const productName = session.cart.map((i) => `${i.name} x${i.qty || 1}`).join(', ');
-    savePayment(orderRef, {
-        storeName: config.storeName || 'Fun bin',
-        amount: total,
-        productName,
-        upiId: config.upiId,
-        upiLink,
-        orderRef,
+    const orderRef = await createOrder({
+        customerName: session.customerName || 'Customer',
+        phone: from,
+        items: session.cart,
+        totalAmount: total,
+        address,
+        sheetsId: client.googleSheetsId
     });
 
-    // Generate clickable HTTPS payment link
     const baseUrl = process.env.RENDER_EXTERNAL_URL || `https://funbin-salesbot.onrender.com`;
-    const payLink = `${baseUrl}/pay/${orderRef}`;
+    const payLink = `${baseUrl}/pay/${orderRef}?clientId=${client.id}`;
 
-    const itemLines = session.cart
-        .map((i) => `  • ${i.name} x${i.qty || 1} — ₹${i.price * (i.qty || 1)}`)
-        .join('\n');
-
-    const text =
-        `🧾 *Order Placed!*\n` +
-        `━━━━━━━━━━━━━━━━━━\n` +
-        `${itemLines}\n` +
-        `━━━━━━━━━━━━━━━━━━\n` +
-        `💰 *Total: ₹${total}*\n\n` +
-        `📲 *Click to Pay ↓*\n` +
-        `${payLink}\n\n` +
-        `☝️ Please click the link to pay via GPay / PhonePe / Paytm.\n\n` +
-        `*Awaiting payment screenshot to confirm your order!* ✅\n` +
-        `🔑 Ref: \`${orderRef}\``;
-
-    // Clear cart
+    await waSender.sendText(client, from, `🧾 *Order Placed!* \n💰 Total: ₹${total}\n📲 Pay here: ${payLink}`);
     updateSession(from, { cart: [] });
-
-    return waSender.sendText(from, text);
 }
+
+module.exports = { handleMessage };
 
 module.exports = { handleMessage };

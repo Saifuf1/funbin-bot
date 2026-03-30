@@ -4,22 +4,20 @@ const config = require('../config');
 const BASE = config.graphApiBase;
 
 /**
- * Send a Private Reply to an Instagram comment.
- * This appears in the commenter's DM inbox.
- *
- * @param {string} commentId - The comment ID to reply to
- * @param {string} message - Text to send
+ * Send a Private Reply to an Instagram comment (Multi-tenant)
+ * @param {string} commentId
+ * @param {string} message
+ * @param {object} client - The SaaS client context
  */
-async function sendPrivateReply(commentId, message) {
+async function sendPrivateReply(commentId, message, client) {
+    const token = client?.pageAccessToken || config.pageAccessToken;
     try {
         const res = await axios.post(
             `${BASE}/${commentId}/private_replies`,
             { message },
-            {
-                params: { access_token: config.pageAccessToken },
-            }
+            { params: { access_token: token } }
         );
-        console.log(`✅ IG private reply sent to comment ${commentId}`);
+        console.log(`✅ [SaaS] IG private reply sent to comment ${commentId} (Client: ${client?.id})`);
         return res.data;
     } catch (err) {
         console.error('❌ IG private reply failed:', err.response?.data || err.message);
@@ -27,30 +25,30 @@ async function sendPrivateReply(commentId, message) {
 }
 
 /**
- * Send a DM to an Instagram user via the Messenger API.
- *
- * @param {string} recipientId - PSID (Page-Scoped User ID)
- * @param {string|object} messageContent - Text string or message object
+ * Send a DM to an Instagram user (Multi-tenant)
+ * @param {string} recipientId
+ * @param {string|object} messageContent
+ * @param {object} client - The SaaS client context
  */
-async function sendDM(recipientId, messageContent) {
-    const message =
-        typeof messageContent === 'string'
-            ? { text: messageContent }
-            : messageContent;
+async function sendDM(recipientId, messageContent, client) {
+    const token = client?.pageAccessToken || config.pageAccessToken;
+    const pageId = client?.instagramPageId || config.instagramPageId;
+
+    const message = typeof messageContent === 'string'
+        ? { text: messageContent }
+        : messageContent;
 
     try {
         const res = await axios.post(
-            `${BASE}/${config.instagramPageId}/messages`,
+            `${BASE}/${pageId}/messages`,
             {
                 recipient: { id: recipientId },
                 message,
                 messaging_type: 'RESPONSE',
             },
-            {
-                params: { access_token: config.pageAccessToken },
-            }
+            { params: { access_token: token } }
         );
-        console.log(`✅ IG DM sent to ${recipientId}`);
+        console.log(`✅ [SaaS] IG DM sent to ${recipientId} (Client: ${client?.id})`);
         return res.data;
     } catch (err) {
         console.error('❌ IG DM failed:', err.response?.data || err.message);
